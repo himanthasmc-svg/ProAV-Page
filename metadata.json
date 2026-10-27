@@ -1,0 +1,6 @@
+{
+  "name": "Pro AV System Architect & Spatial Matrix",
+  "description": "Professional AV system architecture and spatial room matrix suite featuring DISCAS display sizing, dvLED array calculations, acoustics, and engineering tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

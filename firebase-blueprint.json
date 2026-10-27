@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "SharedProject": {
+      "title": "SharedProject",
+      "description": "AV System Architecture shared project workspace containing room schedules, calculation parameters, and equipment matrices.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the project." },
+        "name": { "type": "string", "description": "Project title or client facility name." },
+        "author": { "type": "string", "description": "Creator or last modifying designer name/email." },
+        "rooms": { "type": "string", "description": "JSON serialized room schedule matrix and equipment data." },
+        "activeTab": { "type": "string", "description": "Currently active calculation tab." },
+        "notes": { "type": "string", "description": "Project design notes and remarks." },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last modification." }
+      },
+      "required": ["id", "name", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/shared_projects/{projectId}": {
+      "schema": "SharedProject",
+      "description": "Shared project designs accessible for real-time collaborative AV engineering."
+    }
+  }
+}
