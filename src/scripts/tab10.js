@@ -1604,7 +1604,10 @@ function addRoomRowWithData(data) {
 
   tr.innerHTML = `
     <td class="matrix-td text-center sl-no-cell col-sl" style="background:${floorPal.bgLight};">
-      <span class="badge" style="background:${floorPal.badgeBg}; color:#fff; font-size:0.75rem; font-weight:700;">${String(rowIdx).padStart(2, '0')}</span>
+      <div class="d-flex flex-column align-items-center justify-content-center gap-1 py-1">
+        <input type="checkbox" class="form-check-input matrix-row-select-chk m-0" onchange="onMatrixRowSelectionChanged()" title="Select room for bulk actions" style="cursor:pointer; width:14px; height:14px;">
+        <span class="badge" style="background:${floorPal.badgeBg}; color:#fff; font-size:0.75rem; font-weight:700;">${String(rowIdx).padStart(2, '0')}</span>
+      </div>
     </td>
     <td class="matrix-td col-floor text-center">
       <input type="text" class="form-control matrix-input inp-floor fw-bold text-center shadow-xs mx-auto" value="${data.floor}" style="width:48px; height:22px; font-size:0.72rem; background:${floorPal.bgLight}; color:${floorPal.text}; border:2px solid ${floorPal.badgeBg}; border-radius:4px; padding:1px 2px;" oninput="onFloorChanged(this)" title="Floor ${data.floor} (${floorPal.name})">
@@ -1750,6 +1753,29 @@ function addRoomRowWithData(data) {
               <input type="number" class="form-control matrix-input inp-cam-wspan text-center fw-bold text-indigo-950" value="${camWspan}" step="0.1" min="0.5" max="50" style="width:58px; height:25px; font-size:0.82rem; padding:1px 3px;" oninput="recalcRoomRow(this.closest('tr'))">
               <span class="font-monospace text-muted" style="font-size:0.62rem;">m</span>
             </div>
+          </div>
+        </div>
+
+        <!-- Interactive UI Toggle: Camera Mode (Group Framing / Speaker Tracking / Presenter Tracking) -->
+        <div class="cam-mode-ui-toggle-card p-1 rounded bg-white border border-indigo-200 mb-1 shadow-xs text-start">
+          <div class="d-flex justify-content-between align-items-center mb-1 px-0.5">
+            <span class="fw-bold text-indigo-900 font-mono" style="font-size:0.60rem;">
+              <i class="fa-solid fa-camera-rotate me-0.5 text-indigo-600"></i>Camera Mode:
+            </span>
+            <span class="badge font-mono out-row-cam-mode-badge" style="font-size:0.58rem; background:${framingCalc.badgeBg}; color:#fff;">
+              ${framingCalc.selectedMode.includes('Speaker') ? 'Speaker Track' : (framingCalc.selectedMode.includes('Presenter') ? 'Presenter Track' : 'Group Framing')}
+            </span>
+          </div>
+          <div class="btn-group btn-group-sm w-100 cam-mode-segmented-toggle" role="group" aria-label="Camera Mode UI Toggle">
+            <button type="button" class="btn btn-xs cam-mode-btn ${framingCalc.selectedMode.includes('Group') ? 'btn-primary active text-white' : 'btn-outline-primary'}" data-mode="Group Framing" onclick="setRoomCameraMode(this, 'Group Framing')" title="Group Framing (Auto-Frame whole room)" style="font-size:0.60rem; padding:1px 2px; line-height:1.2;">
+              <i class="fa-solid fa-users me-0.5"></i>Group
+            </button>
+            <button type="button" class="btn btn-xs cam-mode-btn ${framingCalc.selectedMode.includes('Speaker') ? 'btn-warning active text-dark fw-bold' : 'btn-outline-warning text-dark'}" data-mode="Speaker Tracking" onclick="setRoomCameraMode(this, 'Speaker Tracking')" title="Speaker Tracking (Voice AI active speaker zoom)" style="font-size:0.60rem; padding:1px 2px; line-height:1.2;">
+              <i class="fa-solid fa-person-burst me-0.5"></i>Speaker
+            </button>
+            <button type="button" class="btn btn-xs cam-mode-btn ${framingCalc.selectedMode.includes('Presenter') ? 'btn-success active text-white' : 'btn-outline-success'}" data-mode="Presenter Tracking" onclick="setRoomCameraMode(this, 'Presenter Tracking')" title="Presenter Tracking (Stage/podium follow)" style="font-size:0.60rem; padding:1px 2px; line-height:1.2;">
+              <i class="fa-solid fa-person-walking me-0.5"></i>Presenter
+            </button>
           </div>
         </div>
 
@@ -2289,6 +2315,39 @@ function recalcRoomRow(tr) {
       outFramingBadge.innerHTML = `<i class="fa-solid ${framingCalc.icon} me-1"></i>${framingCalc.selectedMode}`;
     }
     if (outFramingDesc) outFramingDesc.innerText = framingCalc.desc;
+  }
+
+  // Synchronize Camera Mode Segmented UI Toggle inside td.col-camera
+  var camModeToggleCard = tr.querySelector('.cam-mode-ui-toggle-card');
+  if (camModeToggleCard) {
+    var modeBadge = camModeToggleCard.querySelector('.out-row-cam-mode-badge');
+    var isGF = framingCalc.selectedMode.includes('Group');
+    var isST = framingCalc.selectedMode.includes('Speaker');
+    var isPT = framingCalc.selectedMode.includes('Presenter');
+
+    if (modeBadge) {
+      if (isCamExcluded) {
+        modeBadge.style.backgroundColor = '#64748b';
+        modeBadge.innerText = 'No Cam';
+      } else {
+        modeBadge.style.backgroundColor = framingCalc.badgeBg;
+        modeBadge.innerText = isST ? 'Speaker Track' : (isPT ? 'Presenter Track' : 'Group Framing');
+      }
+    }
+
+    var gfBtn = camModeToggleCard.querySelector('.cam-mode-btn[data-mode="Group Framing"]');
+    var stBtn = camModeToggleCard.querySelector('.cam-mode-btn[data-mode="Speaker Tracking"]');
+    var ptBtn = camModeToggleCard.querySelector('.cam-mode-btn[data-mode="Presenter Tracking"]');
+
+    if (gfBtn) {
+      gfBtn.className = `btn btn-xs cam-mode-btn ${isGF ? 'btn-primary active text-white' : 'btn-outline-primary'}`;
+    }
+    if (stBtn) {
+      stBtn.className = `btn btn-xs cam-mode-btn ${isST ? 'btn-warning active text-dark fw-bold' : 'btn-outline-warning text-dark'}`;
+    }
+    if (ptBtn) {
+      ptBtn.className = `btn btn-xs cam-mode-btn ${isPT ? 'btn-success active text-white' : 'btn-outline-success'}`;
+    }
   }
 
   // Dynamic Video Bar Recalculation (Allows Qty = 0)
@@ -3244,8 +3303,14 @@ function applyAllColumnVisibility() {
     document.querySelectorAll('.' + colClass).forEach(function(el) {
       if (isHidden) {
         el.classList.add('d-none-col');
+        el.classList.remove('col-fade-in');
+        el.style.display = 'none';
       } else {
         el.classList.remove('d-none-col');
+        el.style.display = '';
+        el.classList.remove('col-fade-in');
+        void el.offsetWidth; // Trigger reflow for smooth animation restart
+        el.classList.add('col-fade-in');
       }
     });
 
@@ -3257,11 +3322,16 @@ function applyAllColumnVisibility() {
       btn.style.opacity = isHidden ? '0.6' : '1';
     }
 
-    var chk = document.querySelector(`.matrix-col-toggle-chk[data-col="${colClass}"]`);
-    if (chk) {
+    document.querySelectorAll(`.matrix-col-toggle-chk[data-col="${colClass}"]`).forEach(function(chk) {
       chk.checked = !isHidden;
-    }
+    });
   });
+
+  // Ensure table layout recalculates smoothly
+  var table = document.getElementById('matrixTable');
+  if (table) {
+    table.style.transition = 'all 0.25s ease';
+  }
 }
 
 function applyCurrentColumnVisibility(targetTr) {
@@ -3270,8 +3340,226 @@ function applyCurrentColumnVisibility(targetTr) {
   hidden.forEach(function(colClass) {
     targetTr.querySelectorAll('.' + colClass).forEach(function(el) {
       el.classList.add('d-none-col');
+      el.style.display = 'none';
+      el.classList.remove('col-fade-in');
     });
   });
+}
+
+// =========================================================================
+// REAL-TIME ROOM SEARCH FILTER ENGINE (#matrixTable)
+// Filters room rows dynamically by room name, floor code, or AV equipment status
+// =========================================================================
+function filterMatrixRooms(query) {
+  var q = (query || '').toLowerCase().trim();
+  var tbody = document.getElementById('matrixTableBody');
+  if (!tbody) return;
+  var rows = Array.from(tbody.querySelectorAll('tr.matrix-room-row'));
+  var badge = document.getElementById('matrixFilterCountBadge');
+  var visibleCountEl = document.getElementById('matrixFilterVisibleCount');
+  var totalCountEl = document.getElementById('matrixFilterTotalCount');
+
+  if (totalCountEl) totalCountEl.textContent = rows.length;
+
+  if (!q) {
+    rows.forEach(function(tr) {
+      tr.style.display = '';
+    });
+    if (badge) badge.classList.add('d-none');
+    return;
+  }
+
+  var terms = q.split(/\s+/).filter(Boolean);
+  var visibleCount = 0;
+
+  rows.forEach(function(tr) {
+    var name = (tr.querySelector('.inp-name')?.value || '').toLowerCase();
+    var floor = (tr.querySelector('.inp-floor')?.value || tr.dataset.floor || '').toLowerCase();
+    var purpose = (tr.querySelector('.inp-purpose')?.value || '').toLowerCase();
+    var dispDiag = (tr.querySelector('.out-calc-diag')?.textContent || '').toLowerCase();
+    var camModel = (tr.querySelector('.inp-cam-model')?.value || '').toLowerCase();
+    var camFraming = (tr.querySelector('.inp-cam-framing')?.value || '').toLowerCase();
+    var framingBadge = (tr.querySelector('.out-framing-badge')?.textContent || '').toLowerCase();
+    var camModeBadge = (tr.querySelector('.out-row-cam-mode-badge')?.textContent || '').toLowerCase();
+    var spkSize = (tr.querySelector('.inp-spk-size')?.value || '').toLowerCase();
+    var spkStatus = (tr.querySelector('.out-spk-status-box')?.textContent || '').toLowerCase();
+    var videoBar = (tr.querySelector('.inp-video-bar')?.value || '').toLowerCase();
+    var note = (tr.querySelector('.inp-note')?.value || '').toLowerCase();
+    var seats = (tr.querySelector('.inp-seats')?.value || '').toLowerCase();
+    var status = tr.classList.contains('table-camera-warning-row') ? 'warning limit exceeded fail' : 'pass optimal normal active';
+
+    // Aggregate all searchable attributes for this room
+    var rowSearchableText = [
+      name,
+      floor,
+      'fl ' + floor,
+      'floor ' + floor,
+      purpose,
+      dispDiag,
+      camModel,
+      camFraming,
+      framingBadge,
+      camModeBadge,
+      spkSize,
+      spkStatus,
+      videoBar,
+      note,
+      seats + ' seats',
+      status
+    ].join(' ');
+
+    var matches = terms.every(function(term) {
+      return rowSearchableText.includes(term);
+    });
+
+    if (matches) {
+      tr.style.display = '';
+      visibleCount++;
+    } else {
+      tr.style.display = 'none';
+    }
+  });
+
+  if (visibleCountEl) visibleCountEl.textContent = visibleCount;
+  if (badge) badge.classList.remove('d-none');
+}
+
+function clearMatrixRoomFilter() {
+  var input = document.getElementById('matrixRoomSearchInput');
+  if (input) input.value = '';
+  filterMatrixRooms('');
+}
+
+// =========================================================================
+// PER-ROW & BULK CAMERA MODE TOGGLE ENGINE (#matrixTable)
+// Allows switching between 'Group Framing', 'Speaker Tracking', and 'Presenter Tracking'
+// =========================================================================
+function setRoomCameraMode(btnEl, mode) {
+  var tr = btnEl.closest('tr');
+  if (!tr) return;
+
+  var fullModeName = 'Group Framing (Auto-Frame)';
+  if (mode === 'Speaker Tracking' || mode.includes('Speaker')) {
+    fullModeName = 'Speaker Tracking (Voice AI)';
+  } else if (mode === 'Presenter Tracking' || mode.includes('Presenter')) {
+    fullModeName = 'Presenter Tracking (Follow)';
+  } else {
+    fullModeName = 'Group Framing (Auto-Frame)';
+  }
+
+  var framingSelect = tr.querySelector('.inp-cam-framing');
+  if (framingSelect) {
+    framingSelect.value = fullModeName;
+  }
+  tr.dataset.camFraming = fullModeName;
+
+  recalcRoomRow(tr);
+
+  if (typeof updateMatrixRoom3DHud === 'function') {
+    updateMatrixRoom3DHud(tr);
+  }
+}
+
+function bulkSetCameraMode(targetMode) {
+  var allRows = Array.from(document.querySelectorAll('#matrixTable tbody tr.matrix-room-row'));
+  var selectedRows = allRows.filter(function(r) {
+    var chk = r.querySelector('.matrix-row-select-chk');
+    return chk && chk.checked;
+  });
+
+  if (selectedRows.length === 0) {
+    showMatrixNotification('Please select room rows using the checkboxes in the first column (SL NO) to batch-update Camera mode.', 'warning');
+    return;
+  }
+
+  var fullModeName = 'Group Framing (Auto-Frame)';
+  if (targetMode === 'Speaker Tracking' || targetMode.includes('Speaker')) {
+    fullModeName = 'Speaker Tracking (Voice AI)';
+  } else if (targetMode === 'Presenter Tracking' || targetMode.includes('Presenter')) {
+    fullModeName = 'Presenter Tracking (Follow)';
+  } else {
+    fullModeName = 'Group Framing (Auto-Frame)';
+  }
+
+  selectedRows.forEach(function(tr) {
+    var framingSelect = tr.querySelector('.inp-cam-framing');
+    if (framingSelect) {
+      framingSelect.value = fullModeName;
+    }
+    tr.dataset.camFraming = fullModeName;
+    recalcRoomRow(tr);
+  });
+
+  updateMatrixTotalsAndSummary();
+  showMatrixNotification(`Updated Camera mode to "${targetMode}" for ${selectedRows.length} selected room(s).`, 'success');
+}
+
+function toggleSelectAllMatrixRows(isSelectAll) {
+  var checkboxes = document.querySelectorAll('#matrixTable tbody .matrix-row-select-chk');
+  checkboxes.forEach(function(chk) {
+    var tr = chk.closest('tr');
+    if (tr && tr.style.display !== 'none') {
+      chk.checked = isSelectAll;
+      tr.classList.toggle('matrix-row-selected', isSelectAll);
+    }
+  });
+  onMatrixRowSelectionChanged();
+}
+
+function selectAllMatrixRows(state) {
+  var selectAllChk = document.getElementById('matrixSelectAllRows');
+  if (selectAllChk) selectAllChk.checked = state;
+  toggleSelectAllMatrixRows(state);
+}
+
+function onMatrixRowSelectionChanged() {
+  var allCheckboxes = Array.from(document.querySelectorAll('#matrixTable tbody .matrix-row-select-chk'));
+  var selectedCount = allCheckboxes.filter(function(chk) {
+    var tr = chk.closest('tr');
+    if (tr) tr.classList.toggle('matrix-row-selected', chk.checked);
+    return chk.checked;
+  }).length;
+
+  var countBadge = document.getElementById('matrixBulkSelectedCount');
+  if (countBadge) {
+    countBadge.textContent = selectedCount + ' selected';
+  }
+
+  var selectAllChk = document.getElementById('matrixSelectAllRows');
+  if (selectAllChk) {
+    selectAllChk.checked = (allCheckboxes.length > 0 && selectedCount === allCheckboxes.length);
+    selectAllChk.indeterminate = (selectedCount > 0 && selectedCount < allCheckboxes.length);
+  }
+}
+
+function showMatrixNotification(message, type) {
+  var notif = document.getElementById('matrixBulkActionNotification');
+  if (!notif) {
+    notif = document.createElement('div');
+    notif.id = 'matrixBulkActionNotification';
+    notif.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:99999; min-width:280px; max-width:440px; transition:all 0.3s ease;';
+    document.body.appendChild(notif);
+  }
+  var bgClass = type === 'success' ? 'bg-success text-white' : (type === 'warning' ? 'bg-warning text-dark' : 'bg-primary text-white');
+  var icon = type === 'success' ? 'fa-circle-check' : (type === 'warning' ? 'fa-triangle-exclamation' : 'fa-info');
+  notif.innerHTML = `
+    <div class="card shadow-lg border-0 ${bgClass} p-2.5 rounded-3 d-flex flex-row align-items-center justify-content-between gap-2 font-mono" style="font-size:0.75rem;">
+      <div class="d-flex align-items-center gap-2">
+        <i class="fa-solid ${icon}"></i>
+        <span>${message}</span>
+      </div>
+      <button type="button" class="btn-close ${type === 'warning' ? '' : 'btn-close-white'} btn-sm" onclick="this.closest('#matrixBulkActionNotification').style.display='none'"></button>
+    </div>
+  `;
+  notif.style.display = 'block';
+  notif.style.opacity = '1';
+  clearTimeout(window._matrixNotifTimer);
+  window._matrixNotifTimer = setTimeout(function() {
+    if (notif) {
+      notif.style.opacity = '0';
+      setTimeout(function() { if (notif) notif.style.display = 'none'; }, 300);
+    }
+  }, 3500);
 }
 
 // =========================================================================
@@ -6231,4 +6519,12 @@ window.applyStudioToSpatialMatrix = applyStudioToSpatialMatrix;
 window.toggleMatrixColumnDirect = toggleMatrixColumnDirect;
 window.showAllMatrixColumns = showAllMatrixColumns;
 window.focusAvSubsystemsColumns = focusAvSubsystemsColumns;
+window.filterMatrixRooms = filterMatrixRooms;
+window.clearMatrixRoomFilter = clearMatrixRoomFilter;
+window.setRoomCameraMode = setRoomCameraMode;
+window.bulkSetCameraMode = bulkSetCameraMode;
+window.toggleSelectAllMatrixRows = toggleSelectAllMatrixRows;
+window.selectAllMatrixRows = selectAllMatrixRows;
+window.onMatrixRowSelectionChanged = onMatrixRowSelectionChanged;
+window.showMatrixNotification = showMatrixNotification;
 

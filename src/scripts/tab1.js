@@ -63,23 +63,38 @@ function setPresetDiag(inches) {
 function switchDisplayStudioMode(mode) {
   var btnA = document.getElementById('btnModeA');
   var btnB = document.getElementById('btnModeB');
+  var btnC = document.getElementById('btnModeC');
   var containerA = document.getElementById('containerModeA');
   var containerB = document.getElementById('containerModeB');
+  var containerC = document.getElementById('containerModeC');
 
   if (mode === 'A') {
-    btnA.className = 'mode-toggle-btn active-blue';
-    btnB.className = 'mode-toggle-btn';
-    containerA.style.display = 'block';
-    containerB.style.display = 'none';
+    if (btnA) btnA.className = 'mode-toggle-btn active-blue';
+    if (btnB) btnB.className = 'mode-toggle-btn';
+    if (btnC) btnC.className = 'mode-toggle-btn';
+    if (containerA) containerA.style.display = 'block';
+    if (containerB) containerB.style.display = 'none';
+    if (containerC) containerC.style.display = 'none';
     calculateDisplay();
-  } else {
-    btnA.className = 'mode-toggle-btn';
-    btnB.className = 'mode-toggle-btn active-orange';
-    containerA.style.display = 'none';
-    containerB.style.display = 'block';
+  } else if (mode === 'B') {
+    if (btnA) btnA.className = 'mode-toggle-btn';
+    if (btnB) btnB.className = 'mode-toggle-btn active-orange';
+    if (btnC) btnC.className = 'mode-toggle-btn';
+    if (containerA) containerA.style.display = 'none';
+    if (containerB) containerB.style.display = 'block';
+    if (containerC) containerC.style.display = 'none';
     calculateDistance();
+  } else if (mode === 'C') {
+    if (btnA) btnA.className = 'mode-toggle-btn';
+    if (btnB) btnB.className = 'mode-toggle-btn';
+    if (btnC) btnC.className = 'mode-toggle-btn active-rose';
+    if (containerA) containerA.style.display = 'none';
+    if (containerB) containerB.style.display = 'none';
+    if (containerC) containerC.style.display = 'block';
+    if (typeof calcStdSize === 'function') calcStdSize();
   }
 }
+
 
 function calculateDisplay() {
   var DMm = parseFloat(document.getElementById('depthMmInput')?.value) || 6000;

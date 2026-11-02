@@ -362,6 +362,12 @@ if (typeof window !== 'undefined') {
 
 // Top Level Application Tab Navigation
 function openTab(evt, tabName) {
+  if (tabName === 'Tab2_5') tabName = 'Tab2';
+  var targetMode = null;
+  if (tabName === 'Tab7') {
+    tabName = 'Tab1';
+    targetMode = 'C';
+  }
   var i, tabcontent, tablinks;
   // Only target top-level tab contents in the container, do not touch modal tab panes
   tabcontent = document.querySelectorAll('.av-container > .tab-content');
@@ -400,19 +406,19 @@ function openTab(evt, tabName) {
     }
   } catch(e) {}
 
-  if (tabName === 'Tab1' && typeof calculateDisplay === 'function') calculateDisplay();
+  if (tabName === 'Tab1') {
+    if (targetMode && typeof switchDisplayStudioMode === 'function') {
+      switchDisplayStudioMode(targetMode);
+    } else if (typeof calculateDisplay === 'function') {
+      calculateDisplay();
+    }
+  }
   if (tabName === 'Tab1_5') {
     if (typeof recalculateIfpd === 'function') recalculateIfpd();
     if (typeof initIfpdStudio === 'function') initIfpdStudio();
   }
   if (tabName === 'Tab2') {
-    if (typeof calcLedScreenBidirectional === 'function') calcLedScreenBidirectional();
-    if (typeof calculateLEDStudio === 'function') calculateLEDStudio();
-  }
-  if (tabName === 'Tab2_5') {
-    if (typeof dvlState !== 'undefined' && dvlState.mode === 3 && typeof calculateMode3 === 'function') calculateMode3();
-    else if (typeof dvlState !== 'undefined' && dvlState.mode === 2 && typeof calculateMode2 === 'function') calculateMode2();
-    else if (typeof calculateMode1 === 'function') calculateMode1();
+    if (typeof calculateUnifiedLedStudio === 'function') calculateUnifiedLedStudio();
   }
   if (tabName === 'Tab3' && typeof updateProjectorSim === 'function') updateProjectorSim();
   if (tabName === 'Tab4' && typeof calcCameraStudio === 'function') calcCameraStudio();
@@ -436,6 +442,9 @@ function openTab(evt, tabName) {
   }
   if (tabName === 'Tab6') {
     if (typeof calcAcousticsFull === 'function') calcAcousticsFull();
+  }
+  if (tabName === 'Tab_RackDesign') {
+    if (typeof RackDesign !== 'undefined' && typeof RackDesign.init === 'function') RackDesign.init();
   }
   if (tabName === 'Tab_WallStructure') {
     if (typeof calculateWallStructure === 'function') calculateWallStructure();

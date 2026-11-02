@@ -2706,7 +2706,7 @@ var threeSpkMicState = {
 };
 
 function renderSpkMicThreeStudio(container, roomL, roomW, roomH, earH, numCols, numRows, actualSpacingX, actualSpacingY, covRadius, tableL, participants, micType, showCones, showMic, showOverlap, showTable, showBeamLobes, showLobeOverlap, showSplHeatmap, showMicSensHeatmap, spl1m) {
-  if (typeof THREE === 'undefined') return false;
+  if (typeof THREE === 'undefined' || !THREE.WebGLRenderer) return false;
 
   var width = container.clientWidth || 920;
   var height = container.clientHeight || 480;
@@ -2757,8 +2757,9 @@ function renderSpkMicThreeStudio(container, roomL, roomW, roomH, earH, numCols, 
     threeSpkMicState.camera.position.set(dist * 0.85, roomH * 1.5, dist * 0.95);
     threeSpkMicState.camera.lookAt(0, roomH * 0.35, 0);
 
-    if (typeof THREE.OrbitControls !== 'undefined') {
-      threeSpkMicState.controls = new THREE.OrbitControls(threeSpkMicState.camera, threeSpkMicState.renderer.domElement);
+    var ControlsConstructor = (typeof THREE !== 'undefined' && THREE.OrbitControls) || (typeof window !== 'undefined' && window.OrbitControls);
+    if (ControlsConstructor) {
+      threeSpkMicState.controls = new ControlsConstructor(threeSpkMicState.camera, threeSpkMicState.renderer.domElement);
       threeSpkMicState.controls.enableDamping = true;
       threeSpkMicState.controls.dampingFactor = 0.06;
       threeSpkMicState.controls.maxPolarAngle = Math.PI / 2 + 0.02;

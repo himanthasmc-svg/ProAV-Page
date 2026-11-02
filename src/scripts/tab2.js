@@ -178,151 +178,136 @@ function applyCabinetPreset() {
 }
 
 function updateLedPowerFromDensity() {
-  var dims = getActiveCabinetDims();
-  var density = parseFloat(document.getElementById('ledPowerDensityWm2')?.value) || 640;
-  var wattsPerCab = density * dims.areaM2;
-  var wInp = document.getElementById('ledCabinetWattsInput');
+  var cab = (typeof getActiveCabinetDimensions === 'function') ? getActiveCabinetDimensions() : { w: 600, h: 337.5 };
+  var density = parseFloat(document.getElementById('ledPowerDensityWm2')?.value) || 250;
+  var cabAreaM2 = (cab.w * cab.h) / 1e6;
+  var wattsPerCab = density * cabAreaM2;
+  var wInp = document.getElementById('ledCabinetWatts') || document.getElementById('ledCabinetWattsInput');
   if (wInp) wInp.value = wattsPerCab.toFixed(1);
-  calculateLEDStudio();
+  var uniDensity = document.getElementById('unifiedPowerDensityInput');
+  if (uniDensity) uniDensity.value = density;
+  updateLedHeatmapAndThermal();
 }
 
-function updateLedPowerFromWatts() {
-  var dims = getActiveCabinetDims();
-  var wattsPerCab = parseFloat(document.getElementById('ledCabinetWattsInput')?.value) || 129.6;
-  var density = dims.areaM2 > 0 ? (wattsPerCab / dims.areaM2) : 640;
+function updateLedPowerFromCabinetWatts() {
+  var cab = (typeof getActiveCabinetDimensions === 'function') ? getActiveCabinetDimensions() : { w: 600, h: 337.5 };
+  var wInp = document.getElementById('ledCabinetWatts') || document.getElementById('ledCabinetWattsInput');
+  var wattsPerCab = parseFloat(wInp?.value) || 50.6;
+  var cabAreaM2 = (cab.w * cab.h) / 1e6;
+  var density = cabAreaM2 > 0 ? (wattsPerCab / cabAreaM2) : 250;
   var dInp = document.getElementById('ledPowerDensityWm2');
-  if (dInp) dInp.value = density.toFixed(1);
-  calculateLEDStudio();
+  if (dInp) dInp.value = Math.round(density);
+  var uniDensity = document.getElementById('unifiedPowerDensityInput');
+  if (uniDensity) uniDensity.value = Math.round(density);
+  updateLedHeatmapAndThermal();
 }
+var updateLedPowerFromWatts = updateLedPowerFromCabinetWatts;
 
-function calculateLEDStudio() {
-  var pitch = parseFloat(document.getElementById('ledPitch')?.value) || 1.2;
-  var dims = getActiveCabinetDims();
-  var cabWatts = parseFloat(document.getElementById('ledCabinetWattsInput')?.value) || 129.6;
+// Unified Master Thermal & Heatmap Solver (Dynamically synced to entered LED wall size)
+function updateLedHeatmapAndThermal() {
+  // Read current wall geometry from unifiedLedState or active inputs
+  var wallW_mm = (typeof unifiedLedState !== 'undefined' && unifiedLedState.wallWidthMm) ? unifiedLedState.wallWidthMm : (parseFloat(document.getElementById('unifiedLedWidthMm')?.value) || 4800);
+  var wallH_mm = (typeof unifiedLedState !== 'undefined' && unifiedLedState.wallHeightMm) ? unifiedLedState.wallHeightMm : (parseFloat(document.getElementById('unifiedLedHeightMm')?.value) || 2700);
 
-  var wallW_mm = parseFloat(document.getElementById('ledWallWMm')?.value) || 4800;
-  var wallH_mm = parseFloat(document.getElementById('ledWallHMm')?.value) || 2700;
+  var cab = (typeof getActiveCabinetDimensions === 'function') ? getActiveCabinetDimensions() : { w: 600, h: 337.5 };
+  var cabW = cab.w || 600;
+  var cabH = cab.h || 337.5;
 
-  var cols = Math.ceil(wallW_mm / dims.w);
-  var rows = Math.ceil(wallH_mm / dims.h);
-  var totalCabs = cols * rows;
+  var cols = (typeof unifiedLedState !== 'undefined' && unifiedLedState.cols) ? unifiedLedState.cols : Math.max(1, Math.round(wallW_mm / cabW));
+  var rows = (typeof unifiedLedState !== 'undefined' && unifiedLedState.rows) ? unifiedLedState.rows : Math.max(1, Math.round(wallH_mm / cabH));
+  var totalCabinets = cols * rows;
 
-  var actualW_m = (cols * dims.w) / 1000.0;
-  var actualH_m = (rows * dims.h) / 1000.0;
+  var actualW_m = (cols * cabW) / 1000.0;
+  var actualH_m = (rows * cabH) / 1000.0;
   var wallArea_m2 = actualW_m * actualH_m;
   var wallArea_sqft = wallArea_m2 * 10.7639;
 
-  // Pixel metrics
-  var pixelDensity_sqm = Math.round(1000000 / (pitch * pitch));
-  var totalPixels = Math.round(wallArea_m2 * pixelDensity_sqm);
-  var widthPixels = Math.round((actualW_m * 1000) / pitch);
-  var heightPixels = Math.round((actualH_m * 1000) / pitch);
+  // Power density input
+  var elDensity = document.getElementById('ledPowerDensityWm2') || document.getElementById('unifiedPowerDensityInput');
+  var densityWatts = parseFloat(elDensity?.value) || 250;
 
-  // Electrical & Thermal Heat Load Calculation
-  var peakWatts = totalCabs * cabWatts;
-  var loadMode = document.getElementById('ledHeatLoadMode')?.value || 'peak';
-  var loadFactor = (loadMode === 'typical') ? 0.45 : ((loadMode === 'mixed') ? 0.60 : 1.0);
+  // Cabinet wattage
+  var elCabWatts = document.getElementById('ledCabinetWatts') || document.getElementById('ledCabinetWattsInput');
+  var cabAreaM2 = (cabW * cabH) / 1e6;
+  var cabWatts = 50.6;
+  if (elCabWatts && document.activeElement === elCabWatts) {
+    cabWatts = parseFloat(elCabWatts.value) || 50.6;
+  } else {
+    cabWatts = cabAreaM2 * densityWatts;
+    if (elCabWatts) elCabWatts.value = cabWatts.toFixed(1);
+  }
 
-  var operatingWatts = peakWatts * loadFactor;
+  var totalContinuousWatts = totalCabinets * cabWatts;
+  var peakWatts = totalContinuousWatts * 1.5;
+
+  // Thermal Dissipation (ASHRAE / AVIXA formulas)
+  var operatingBtu = totalContinuousWatts * 3.412142;
   var peakBtu = peakWatts * 3.412142;
-  var operatingBtu = operatingWatts * 3.412142;
   var operatingKcal = operatingBtu * 0.251996;
   var totalAcTons = operatingBtu / 12000.0;
-
-  // Localized AC Unit Sizing & Redundancy Recommendation
-  var unitBtu = parseFloat(document.getElementById('ledAcUnitSize')?.value) || 18000;
-  var unitTons = unitBtu / 12000.0;
-  var redundancy = document.getElementById('ledAcRedundancy')?.value || 'N';
-
-  var baseUnits = Math.ceil(operatingBtu / unitBtu);
-  if (baseUnits < 1) baseUnits = 1;
-  var totalUnits = (redundancy === 'N1') ? (baseUnits + 1) : baseUnits;
-
-  var totalInstalledBtu = baseUnits * unitBtu;
-  var unitLoadPct = Math.min(100, Math.round((operatingBtu / totalInstalledBtu) * 100));
-  var totalInstalledTons = (totalUnits * unitTons).toFixed(1);
-
-  var cfm = Math.round(totalAcTons * 400);
+  var cfm = Math.round(operatingBtu / (1.08 * 20.0)); // Delta T = 20 deg F
   var m3h = Math.round(cfm * 1.699);
-  var btuPerSqm = Math.round(operatingBtu / wallArea_m2);
+  var btuPerSqm = wallArea_m2 > 0 ? Math.round(operatingBtu / wallArea_m2) : 0;
 
-  // Circuits
-  var circuits16A = Math.ceil(peakWatts / (230 * 16 * 0.8));
-  var circuits20A = Math.ceil(peakWatts / (120 * 20 * 0.8));
+  // Localized AC Units (1.5 TR or 2.0 TR units)
+  var unitTons = 1.5;
+  var unitBtu = unitTons * 12000;
+  var baseUnits = Math.max(1, Math.ceil(operatingBtu / unitBtu));
+  var totalUnits = baseUnits + 1; // N+1 redundancy
 
-  // Helper setter
+  // Electrical Mains Sockets (NEC 80% continuous rating)
+  var socketAmps = parseFloat(document.getElementById('ledSocketAmps')?.value) || 16;
+  var mainsVoltage = parseFloat(document.getElementById('ledMainsVoltage')?.value) || 230;
+  var socketCapacityWatts = mainsVoltage * socketAmps * 0.8;
+  var socketsRequired = Math.max(1, Math.ceil(totalContinuousWatts / socketCapacityWatts));
+
+  // Update Mode 5 KPI Summary Display
   var setTxt = function(id, txt) { var el = document.getElementById(id); if (el) el.innerText = txt; };
-
-  setTxt('resLedColsCount', cols + ' Cols');
-  setTxt('resLedRowsCount', rows + ' Rows');
-  setTxt('resLedCabCount', totalCabs + ' Cabs');
-  setTxt('resLedSocketCount', cols + ' Sockets');
-
-  // Pitch density badge
-  var pitchBadge = document.getElementById('ledPitchDensityBadge');
-  if (pitchBadge) {
-    pitchBadge.innerText = `${pixelDensity_sqm.toLocaleString()} px/m² • ${(totalPixels/1e6).toFixed(2)} Mpx (${widthPixels}×${heightPixels})`;
+  setTxt('resLedTotalKw', (totalContinuousWatts / 1000.0).toFixed(2) + ' kW');
+  setTxt('resLedTotalBtu', Math.round(operatingBtu).toLocaleString() + ' BTU/hr');
+  setTxt('resLedCfmAir', cfm.toLocaleString() + ' CFM');
+  setTxt('resLedAcTonnage', totalAcTons.toFixed(2) + ' TR (' + (totalContinuousWatts / 1000.0).toFixed(1) + ' kWth)');
+  setTxt('resLedSocketsTotal', socketsRequired + ' Sockets');
+  setTxt('lblHeatmapSyncDims', actualW_m.toFixed(2) + ' × ' + actualH_m.toFixed(2) + ' m (' + cols + 'W × ' + rows + 'H • ' + totalCabinets + ' Panels)');
+  var elDetail = document.getElementById('resLedSocketsDetail');
+  if (elDetail) {
+    elDetail.innerHTML = '<i class="fa-solid fa-plug text-warning me-1"></i>Electrical Drop Requirement: <strong>' + socketsRequired + ' dedicated ' + socketAmps + 'A (' + mainsVoltage + 'V) mains socket' + (socketsRequired > 1 ? 's' : '') + '</strong> required for ' + (totalContinuousWatts / 1000.0).toFixed(2) + ' kW continuous load.';
   }
 
-  // Localized AC Headline Recommendation
-  var acRecHeadline = document.getElementById('resLedAcRecHeadline');
-  if (acRecHeadline) {
-    acRecHeadline.innerText = `${baseUnits} × ${unitTons.toFixed(1)} TR Localized AC Unit${baseUnits > 1 ? 's' : ''}`;
-  }
-  var acRecSub = document.getElementById('resLedAcRecSub');
-  if (acRecSub) {
-    if (redundancy === 'N1') {
-      acRecSub.innerHTML = `<span class="badge bg-warning text-dark font-mono"><i class="fa-solid fa-shield-halved me-1"></i>${totalUnits} Units Total (${baseUnits} Active @ ${unitLoadPct}% Load + 1 Standby N+1 Failover Unit)</span>`;
-    } else {
-      acRecSub.innerHTML = `<span class="badge bg-success font-mono"><i class="fa-solid fa-check-circle me-1"></i>Standard N Config (${unitLoadPct}% Duty Load per Active Unit • Total Installed: ${totalInstalledTons} TR)</span>`;
-    }
-  }
-
-  // Localized AC Units visual badges list
-  var acUnitsVisual = document.getElementById('resLedAcUnitsVisual');
-  if (acUnitsVisual) {
-    var unitsHtml = '';
-    for (var u = 1; u <= baseUnits; u++) {
-      unitsHtml += `<div class="d-inline-flex align-items-center gap-1 p-2 rounded bg-dark border border-success-subtle text-success me-2 mb-2 font-mono small">
-        <i class="fa-solid fa-fan fa-spin text-info" style="--fa-animation-duration: 4s;"></i>
-        <span><strong>AC-${u}</strong>: ${unitTons.toFixed(1)} TR (${unitLoadPct}% Load)</span>
-      </div>`;
-    }
-    if (redundancy === 'N1') {
-      unitsHtml += `<div class="d-inline-flex align-items-center gap-1 p-2 rounded bg-dark border border-warning-subtle text-warning me-2 mb-2 font-mono small">
-        <i class="fa-solid fa-power-off text-warning"></i>
-        <span><strong>AC-${totalUnits}</strong>: ${unitTons.toFixed(1)} TR (N+1 Standby)</span>
-      </div>`;
-    }
-    acUnitsVisual.innerHTML = unitsHtml;
-  }
-
-  // Real-time Thermal and Electrical outputs
-  setTxt('resLedWatts', (operatingWatts / 1000.0).toFixed(2) + ' kW' + (loadMode !== 'peak' ? ' (Avg)' : ' (Peak)'));
+  // Legacy element sync
+  setTxt('resLedWatts', (totalContinuousWatts / 1000.0).toFixed(2) + ' kW (Avg)');
   setTxt('resLedPeakWatts', 'Peak: ' + (peakWatts / 1000.0).toFixed(2) + ' kW');
   setTxt('resLedBtu', Math.round(operatingBtu).toLocaleString() + ' BTU/h');
   setTxt('resLedPeakBtu', 'Peak: ' + Math.round(peakBtu).toLocaleString() + ' BTU/h');
   setTxt('resLedKcal', Math.round(operatingKcal).toLocaleString() + ' kcal/h');
-  setTxt('resLedAcTons', totalAcTons.toFixed(2) + ' TR (' + (operatingWatts / 1000.0).toFixed(2) + ' kWth)');
+  setTxt('resLedAcTons', totalAcTons.toFixed(2) + ' TR');
   setTxt('resLedAirflowCfm', cfm.toLocaleString() + ' CFM');
   setTxt('resLedAirflowM3h', cfm.toLocaleString() + ' CFM (' + m3h.toLocaleString() + ' m³/h)');
   setTxt('resLedHeatFlux', btuPerSqm.toLocaleString() + ' BTU/h/m²');
-  setTxt('resLed16A', circuits16A + ' Circuits');
-  setTxt('resLedActiveDims', `${actualW_m.toFixed(2)} × ${actualH_m.toFixed(2)} m (${wallArea_m2.toFixed(2)} m² / ${wallArea_sqft.toFixed(1)} ft²)`);
+  setTxt('resLed16A', socketsRequired + ' Circuits');
+  setTxt('resLedActiveDims', actualW_m.toFixed(2) + ' × ' + actualH_m.toFixed(2) + ' m (' + wallArea_m2.toFixed(2) + ' m² / ' + wallArea_sqft.toFixed(1) + ' ft²)');
+  setTxt('resLedColsCount', cols + ' Cols');
+  setTxt('resLedRowsCount', rows + ' Rows');
+  setTxt('resLedCabCount', totalCabinets + ' Cabs');
+  setTxt('resLedSocketCount', cols + ' Sockets');
 
-  // Cache thermal parameters
+  // Cache thermal state for interactive tile hover/click
   ledThermalState.cachedCols = cols;
   ledThermalState.cachedRows = rows;
-  ledThermalState.cachedCabW = dims.w;
-  ledThermalState.cachedCabH = dims.h;
+  ledThermalState.cachedCabW = cabW;
+  ledThermalState.cachedCabH = cabH;
   ledThermalState.cachedCabWatts = cabWatts;
   ledThermalState.cachedBaseUnits = baseUnits;
-  ledThermalState.cachedUnitTonsStr = unitTons.toFixed(1);
+  ledThermalState.cachedUnitTonsStr = (totalAcTons / baseUnits).toFixed(1);
   ledThermalState.cachedTotalUnits = totalUnits;
-  ledThermalState.cachedRedundancy = redundancy;
+  ledThermalState.cachedRedundancy = 'N1';
 
-  renderLedWallWithSocketsSvg(cols, rows, dims.w, dims.h, baseUnits, unitTons.toFixed(1), totalUnits, redundancy);
+  // Render the Heatmap SVG dynamically with the exact cols and rows of the entered wall!
+  renderLedWallWithSocketsSvg(cols, rows, cabW, cabH, baseUnits, (totalAcTons / baseUnits).toFixed(1), totalUnits, 'N1');
 }
+
+var calcLedPowerAndThermal = updateLedHeatmapAndThermal;
+var calculateLEDStudio = updateLedHeatmapAndThermal;
 
 // Thermal Heatmap State & Interactivity Engine for Tab 2
 var ledThermalState = {
@@ -634,8 +619,14 @@ var GLOBAL_PANELS = {
   '480x480':   { name: '480 × 480 mm',   w: 480, h: 480,   aspect: '1:1',  desc: 'Architectural Series' },
   '250x250':   { name: '250 × 250 mm',   w: 250, h: 250,   aspect: '1:1',  desc: 'Compact Puck Series' },
   '500x1000':  { name: '500 × 1000 mm',  w: 500, h: 1000,  aspect: '1:2',  desc: 'Touring / Stage Backdrop' },
-  '640x480':   { name: '640 × 480 mm',   w: 640, h: 480,   aspect: '4:3',  desc: 'Broadcast Studio Series' },
-  '400x300':   { name: '400 × 300 mm',   w: 400, h: 300,   aspect: '4:3',  desc: 'Modular Fine Pitch 4:3' }
+  '640x480':     { name: '640 × 480 mm',     w: 640,   h: 480,   aspect: '4:3',  desc: 'Broadcast Studio Series' },
+  '400x300':     { name: '400 × 300 mm',     w: 400,   h: 300,   aspect: '4:3',  desc: 'Modular Fine Pitch 4:3' },
+  '806.4x453.6': { name: '806.4 × 453.6 mm', w: 806.4, h: 453.6, aspect: '16:9', desc: 'Samsung The Wall MicroLED' },
+  'samsung_the_wall': { name: 'Samsung The Wall (806.4 × 453.6 mm)', w: 806.4, h: 453.6, aspect: '16:9', desc: 'Samsung MicroLED' },
+  '403.2x453.6': { name: '403.2 × 453.6 mm', w: 403.2, h: 453.6, aspect: '8:9',  desc: 'Sony Crystal LED Modular Tile' },
+  'sony_crystal_led': { name: 'Sony Crystal LED (403.2 × 453.6 mm)', w: 403.2, h: 453.6, aspect: '8:9',  desc: 'Sony Crystal LED' },
+  '1000x500':    { name: '1000 × 500 mm',    w: 1000,  h: 500,   aspect: '2:1',  desc: 'Staging / Truss Series' },
+  'custom':      { name: 'Custom Panel (User-Defined)', w: 600, h: 337.5, aspect: 'Custom', desc: 'Custom OEM Dimensions' }
 };
 
 var RESOLUTION_PRESETS = {
@@ -1259,90 +1250,197 @@ function applyM2PanelDirect(key) {
 }
 
 function drawArraySVG(cols, rows, wMm, hMm, cabW, cabH, accentColor) {
-  var svg = document.getElementById('svg-wall-array');
-  if (!svg) return;
-  svg.innerHTML = '';
+  var container = document.getElementById('arraySvgContainer');
+  if (!container) return;
+  accentColor = accentColor || '#38bdf8';
+  cols = Math.max(1, parseInt(cols, 10) || 8);
+  rows = Math.max(1, parseInt(rows, 10) || 6);
+  wMm = Math.max(200, parseFloat(wMm) || (cols * (cabW || 600)));
+  hMm = Math.max(200, parseFloat(hMm) || (rows * (cabH || 337.5)));
+  cabW = cabW || (wMm / cols);
+  cabH = cabH || (hMm / rows);
 
-  var svgW = 1000, svgH = 560, margin = 60;
-  var maxDrawW = svgW - margin * 2;
-  var maxDrawH = svgH - margin * 2;
+  var svgW = 1100, svgH = 620;
+  var floorY = 560;
+  var topMargin = 75;
+  var leftMargin = 125;
+  var rightMargin = 220;
+  var bottomMargin = 85;
+
+  var maxDrawW = svgW - leftMargin - rightMargin;
+  var maxDrawH = floorY - topMargin - bottomMargin;
   var scale = Math.min(maxDrawW / wMm, maxDrawH / hMm);
   var drawW = wMm * scale;
   var drawH = hMm * scale;
-  var startX = (svgW - drawW) / 2;
-  var startY = (svgH - drawH) / 2;
+
+  var startX = leftMargin + (maxDrawW - drawW) / 2;
+  var startY = (floorY - bottomMargin) - drawH; // bottom aligned relative to clearance
   var tileW = drawW / cols;
   var tileH = drawH / rows;
 
-  var dimLeg = document.getElementById('svg-dimension-legend');
-  var cabBreak = document.getElementById('svg-cabinet-breakdown');
-  if (dimLeg) dimLeg.textContent = Math.round(wMm) + ' mm (W) × ' + Math.round(hMm) + ' mm (H)';
-  if (cabBreak) cabBreak.textContent = 'Array: ' + cols + ' cols × ' + rows + ' rows (' + (cols * rows) + ' Total Cabinets @ ' + cabW + '×' + cabH + ' mm)';
+  var diagInches = (Math.sqrt(wMm * wMm + hMm * hMm) / 25.4).toFixed(1);
+  var gcd = function(a, b) { return b ? gcd(b, a % b) : a; };
+  var g = gcd(Math.round(wMm), Math.round(hMm));
+  var rW = Math.round(wMm / g), rH = Math.round(hMm / g);
+  var ratioStr = (rW < 50 && rH < 50) ? (rW + ':' + rH) : (wMm / hMm).toFixed(2) + ':1';
+  var pitch = (unifiedLedState && unifiedLedState.pitch) ? unifiedLedState.pitch : (dvlState && dvlState.pitch ? dvlState.pitch : 1.25);
+  var resW = Math.round(wMm / pitch);
+  var resH = Math.round(hMm / pitch);
 
-  var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-  defs.innerHTML = `<linearGradient id="cab-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#161f30" /><stop offset="100%" stop-color="#0e1422" /></linearGradient>`;
-  svg.appendChild(defs);
+  // AVIXA DISCAS Distances
+  var closestViewerM = (wMm / 1000.0) * 1.0;
+  var furthestBdmM = (hMm / 1000.0) * 6.0; // 6H for BDM
+  var furthestAdmM = (hMm / 1000.0) * 4.0; // 4H for ADM
 
-  var backing = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  backing.setAttribute('x', startX - 4); backing.setAttribute('y', startY - 4);
-  backing.setAttribute('width', drawW + 8); backing.setAttribute('height', drawH + 8);
-  backing.setAttribute('rx', '6'); backing.setAttribute('fill', '#050811');
-  backing.setAttribute('stroke', '#1e293b'); backing.setAttribute('stroke-width', '1.5');
-  svg.appendChild(backing);
-
+  var cabinetsSvg = '';
   for (var c = 0; c < cols; c++) {
     for (var r = 0; r < rows; r++) {
       var x = startX + c * tileW;
       var y = startY + r * tileH;
-      var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', x + 1); rect.setAttribute('y', y + 1);
-      rect.setAttribute('width', tileW - 2); rect.setAttribute('height', tileH - 2);
-      rect.setAttribute('rx', '2'); rect.setAttribute('fill', 'url(#cab-grad)');
-      rect.setAttribute('stroke', accentColor); rect.setAttribute('stroke-width', '1'); rect.setAttribute('stroke-opacity', '0.65');
-      svg.appendChild(rect);
-
-      var cross = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      cross.setAttribute('cx', x + tileW / 2); cross.setAttribute('cy', y + tileH / 2);
-      cross.setAttribute('r', '1.5'); cross.setAttribute('fill', accentColor); cross.setAttribute('fill-opacity', '0.4');
-      svg.appendChild(cross);
+      cabinetsSvg += `
+        <rect x="${x + 0.8}" y="${y + 0.8}" width="${tileW - 1.6}" height="${tileH - 1.6}" rx="1.5" fill="url(#cadCabGrad)" stroke="${accentColor}" stroke-width="0.9" stroke-opacity="0.6"/>
+        <line x1="${x + tileW/2 - 3}" y1="${y + tileH/2}" x2="${x + tileW/2 + 3}" y2="${y + tileH/2}" stroke="${accentColor}" stroke-width="0.8" opacity="0.4"/>
+        <line x1="${x + tileW/2}" y1="${y + tileH/2 - 3}" x2="${x + tileW/2}" y2="${y + tileH/2 + 3}" stroke="${accentColor}" stroke-width="0.8" opacity="0.4"/>
+      `;
+      if (cols <= 16 && rows <= 12 && tileW > 28 && tileH > 18) {
+        cabinetsSvg += `
+          <text x="${x + tileW/2}" y="${y + tileH/2 + 3}" fill="${accentColor}" opacity="0.5" font-size="7" text-anchor="middle" font-family="'JetBrains Mono', monospace">C${c+1}-R${r+1}</text>
+        `;
+      }
     }
   }
 
-  var border = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  border.setAttribute('x', startX); border.setAttribute('y', startY);
-  border.setAttribute('width', drawW); border.setAttribute('height', drawH);
-  border.setAttribute('rx', '4'); border.setAttribute('fill', 'none');
-  border.setAttribute('stroke', accentColor); border.setAttribute('stroke-width', '2.5');
-  svg.appendChild(border);
+  var svgHtml = `
+    <svg id="svg-wall-array" viewBox="0 0 ${svgW} ${svgH}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style="background:#050914; font-family:'JetBrains Mono', monospace; display:block; border-radius:6px;">
+      <defs>
+        <linearGradient id="cadCabGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#141c2e" />
+          <stop offset="100%" stop-color="#090d16" />
+        </linearGradient>
+        <pattern id="cadGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="0" x2="20" y2="0" stroke="#1e293b" stroke-width="0.5" opacity="0.4"/>
+          <line x1="0" y1="0" x2="0" y2="20" stroke="#1e293b" stroke-width="0.5" opacity="0.4"/>
+        </pattern>
+        <marker id="cadArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#38bdf8"/>
+        </marker>
+        <marker id="cadArrowAmber" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#f59e0b"/>
+        </marker>
+        <marker id="cadArrowGreen" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#10b981"/>
+        </marker>
+      </defs>
 
-  var lineTop = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  lineTop.innerHTML = `
-    <line x1="${startX}" y1="${startY - 18}" x2="${startX + drawW}" y2="${startY - 18}" stroke="#64748b" stroke-width="1.5" />
-    <line x1="${startX}" y1="${startY - 24}" x2="${startX}" y2="${startY - 12}" stroke="#64748b" stroke-width="1.5" />
-    <line x1="${startX + drawW}" y1="${startY - 24}" x2="${startX + drawW}" y2="${startY - 12}" stroke="#64748b" stroke-width="1.5" />
-    <text x="${startX + drawW / 2}" y="${startY - 26}" text-anchor="middle" fill="#cbd5e1" font-size="12" font-family="JetBrains Mono" font-weight="600">
-      Width: ${Math.round(wMm)} mm (${(wMm * MM_TO_FT).toFixed(1)} ft) - ${cols} Cols
-    </text>`;
-  svg.appendChild(lineTop);
+      <!-- Background Grid -->
+      <rect x="0" y="0" width="${svgW}" height="${svgH}" fill="url(#cadGrid)" />
 
-  var lineLeft = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  lineLeft.innerHTML = `
-    <line x1="${startX - 18}" y1="${startY}" x2="${startX - 18}" y2="${startY + drawH}" stroke="#64748b" stroke-width="1.5" />
-    <line x1="${startX - 24}" y1="${startY}" x2="${startX - 12}" y2="${startY}" stroke="#64748b" stroke-width="1.5" />
-    <line x1="${startX - 24}" y1="${startY + drawH}" x2="${startX - 12}" y2="${startY + drawH}" stroke="#64748b" stroke-width="1.5" />
-    <text x="${startX - 28}" y="${startY + drawH / 2}" text-anchor="middle" fill="#cbd5e1" font-size="12" font-family="JetBrains Mono" font-weight="600" transform="rotate(-90 ${startX - 28} ${startY + drawH / 2})">
-      Height: ${Math.round(hMm)} mm (${(hMm * MM_TO_FT).toFixed(1)} ft) - ${rows} Rows
-    </text>`;
-  svg.appendChild(lineLeft);
+      <!-- Centerline Datum -->
+      <g stroke="#334155" stroke-dasharray="4,4" stroke-width="0.9">
+        <line x1="${startX + drawW/2}" y1="${topMargin - 20}" x2="${startX + drawW/2}" y2="${floorY}" />
+        <line x1="${startX - 30}" y1="${startY + drawH/2}" x2="${startX + drawW + 30}" y2="${startY + drawH/2}" />
+        <circle cx="${startX + drawW/2}" cy="${startY + drawH/2}" r="6" fill="none" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="none"/>
+        <text x="${startX + drawW/2 + 10}" y="${startY + drawH/2 - 8}" fill="#f59e0b" font-size="8" font-weight="bold">CL ⯁ CENTERLINE</text>
+      </g>
 
-  var diagText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  diagText.setAttribute('x', startX + drawW / 2); diagText.setAttribute('y', startY + drawH / 2);
-  diagText.setAttribute('text-anchor', 'middle'); diagText.setAttribute('dominant-baseline', 'middle');
-  diagText.setAttribute('fill', '#ffffff'); diagText.setAttribute('fill-opacity', '0.85');
-  diagText.setAttribute('font-size', '16'); diagText.setAttribute('font-family', 'JetBrains Mono');
-  diagText.setAttribute('font-weight', '700');
-  diagText.textContent = (Math.sqrt(wMm*wMm + hMm*hMm) / 25.4).toFixed(1) + '" Diagonal';
-  svg.appendChild(diagText);
+      <!-- Cabinet Array Backing -->
+      <rect x="${startX - 4}" y="${startY - 4}" width="${drawW + 8}" height="${drawH + 8}" rx="4" fill="#020617" stroke="#334155" stroke-width="1.5"/>
+
+      <!-- Individual Cabinets -->
+      ${cabinetsSvg}
+
+      <!-- Outer Array Perimeter Frame -->
+      <rect x="${startX}" y="${startY}" width="${drawW}" height="${drawH}" rx="3" fill="none" stroke="${accentColor}" stroke-width="2.5"/>
+
+      <!-- Diagonal Span Line -->
+      <line x1="${startX + 4}" y1="${startY + 4}" x2="${startX + drawW - 4}" y2="${startY + drawH - 4}" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+
+      <!-- Top Architectural Width Dimension Line -->
+      <g stroke="#38bdf8" stroke-width="1.2">
+        <line x1="${startX}" y1="${startY - 24}" x2="${startX + drawW}" y2="${startY - 24}" marker-start="url(#cadArrow)" marker-end="url(#cadArrow)"/>
+        <line x1="${startX}" y1="${startY - 34}" x2="${startX}" y2="${startY - 4}" stroke="#64748b" stroke-width="1"/>
+        <line x1="${startX + drawW}" y1="${startY - 34}" x2="${startX + drawW}" y2="${startY - 4}" stroke="#64748b" stroke-width="1"/>
+      </g>
+      <rect x="${startX + drawW/2 - 120}" y="${startY - 44}" width="240" height="22" rx="3" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
+      <text x="${startX + drawW/2}" y="${startY - 29}" fill="#38bdf8" font-size="10.5" font-weight="bold" text-anchor="middle">
+        WIDTH: ${Math.round(wMm)} mm (${(wMm / 304.8).toFixed(1)} ft) &bull; ${cols} COLS
+      </text>
+
+      <!-- Left Architectural Height Dimension Line -->
+      <g stroke="#38bdf8" stroke-width="1.2">
+        <line x1="${startX - 24}" y1="${startY}" x2="${startX - 24}" y2="${startY + drawH}" marker-start="url(#cadArrow)" marker-end="url(#cadArrow)"/>
+        <line x1="${startX - 34}" y1="${startY}" x2="${startX - 4}" y2="${startY}" stroke="#64748b" stroke-width="1"/>
+        <line x1="${startX - 34}" y1="${startY + drawH}" x2="${startX - 4}" y2="${startY + drawH}" stroke="#64748b" stroke-width="1"/>
+      </g>
+      <g transform="translate(${startX - 30}, ${startY + drawH/2}) rotate(-90)">
+        <rect x="-110" y="-14" width="220" height="22" rx="3" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
+        <text x="0" y="1" fill="#38bdf8" font-size="10" font-weight="bold" text-anchor="middle">
+          HEIGHT: ${Math.round(hMm)} mm (${(hMm / 304.8).toFixed(1)} ft) &bull; ${rows} ROWS
+        </text>
+      </g>
+
+      <!-- Finished Floor Line & Datum (AFFL 0.0) -->
+      <line x1="30" y1="${floorY}" x2="${svgW - 30}" y2="${floorY}" stroke="#10b981" stroke-width="2"/>
+      <rect x="40" y="${floorY - 24}" width="200" height="20" rx="3" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+      <text x="140" y="${floorY - 10}" fill="#34d399" font-size="9" font-weight="bold" text-anchor="middle">
+        ⏚ AFFL 0.0 mm (FINISHED FLOOR)
+      </text>
+
+      <!-- Bottom Clearance Dimension to Floor -->
+      <g stroke="#f59e0b" stroke-width="1.2">
+        <line x1="${startX + drawW + 18}" y1="${startY + drawH}" x2="${startX + drawW + 18}" y2="${floorY}" marker-start="url(#cadArrowAmber)" marker-end="url(#cadArrowAmber)"/>
+        <line x1="${startX + drawW}" y1="${startY + drawH}" x2="${startX + drawW + 30}" y2="${startY + drawH}" stroke="#64748b" stroke-width="0.8"/>
+        <line x1="${startX + drawW}" y1="${floorY}" x2="${startX + drawW + 30}" y2="${floorY}" stroke="#64748b" stroke-width="0.8"/>
+      </g>
+      <text x="${startX + drawW + 28}" y="${startY + drawH + (floorY - (startY + drawH))/2 + 4}" fill="#f59e0b" font-size="9" font-weight="bold">
+        CLEARANCE: 1000 mm AFFL
+      </text>
+
+      <!-- Center Diagonal & Aspect Ratio Badge -->
+      <rect x="${startX + drawW/2 - 110}" y="${startY + drawH/2 - 16}" width="220" height="32" rx="6" fill="#0f172a" stroke="#ef4444" stroke-width="1.5"/>
+      <text x="${startX + drawW/2}" y="${startY + drawH/2 + 4}" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">
+        DIAGONAL: ${diagInches}" (${ratioStr})
+      </text>
+
+      <!-- Right Side Specification & Sightline Card -->
+      <g transform="translate(${svgW - 200}, ${topMargin - 15})">
+        <rect x="0" y="0" width="185" height="340" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1.2"/>
+        
+        <rect x="0" y="0" width="185" height="28" rx="6" fill="#1e293b"/>
+        <text x="92" y="18" fill="#38bdf8" font-size="10" font-weight="bold" text-anchor="middle">ARRAY SPECIFICATIONS</text>
+
+        <text x="12" y="50" fill="#94a3b8" font-size="8.5">Grid Configuration:</text>
+        <text x="12" y="66" fill="#f8fafc" font-size="10" font-weight="bold">${cols} Cols &times; ${rows} Rows (${cols*rows} Cabs)</text>
+
+        <text x="12" y="90" fill="#94a3b8" font-size="8.5">Cabinet Form Factor:</text>
+        <text x="12" y="106" fill="#38bdf8" font-size="9.5" font-weight="bold">${cabW.toFixed(1)} &times; ${cabH.toFixed(1)} mm</text>
+
+        <text x="12" y="130" fill="#94a3b8" font-size="8.5">Pixel Pitch &amp; Res:</text>
+        <text x="12" y="146" fill="#10b981" font-size="9.5" font-weight="bold">${pitch}mm &bull; ${resW} &times; ${resH} px</text>
+
+        <line x1="10" y1="162" x2="175" y2="162" stroke="#334155" stroke-width="1"/>
+
+        <text x="92" y="180" fill="#f59e0b" font-size="9.5" font-weight="bold" text-anchor="middle">AVIXA DISCAS SIGHTLINES</text>
+
+        <circle cx="22" cy="208" r="6" fill="#06b6d4"/>
+        <text x="34" y="206" fill="#22d3ee" font-size="8.5" font-weight="bold">Closest Viewer (1.0&times;W)</text>
+        <text x="34" y="219" fill="#ffffff" font-size="10" font-weight="bold">${closestViewerM.toFixed(2)} m (${Math.round(wMm)} mm)</text>
+
+        <circle cx="22" cy="245" r="6" fill="#a855f7"/>
+        <text x="34" y="243" fill="#c084fc" font-size="8.5" font-weight="bold">BDM Limit (6H)</text>
+        <text x="34" y="256" fill="#ffffff" font-size="10" font-weight="bold">${furthestBdmM.toFixed(2)} m (${Math.round(hMm*6)} mm)</text>
+
+        <circle cx="22" cy="282" r="6" fill="#ef4444"/>
+        <text x="34" y="280" fill="#f87171" font-size="8.5" font-weight="bold">ADM Limit (4H)</text>
+        <text x="34" y="293" fill="#ffffff" font-size="10" font-weight="bold">${furthestAdmM.toFixed(2)} m (${Math.round(hMm*4)} mm)</text>
+
+        <rect x="8" y="306" width="169" height="24" rx="3" fill="#1e293b" stroke="#475569" stroke-width="0.8"/>
+        <text x="92" y="322" fill="#94a3b8" font-size="7.5" text-anchor="middle">DISCAS ANSI/INFOCOMM V202.01</text>
+      </g>
+    </svg>
+  `;
+
+  container.innerHTML = svgHtml;
 }
 
 // ==========================================
@@ -2006,3 +2104,629 @@ function calculateOutdoorLedSpecs() {
   if (elWind) elWind.innerText = `${totalWindLoadKn} kN (${Math.round(parseFloat(totalWindLoadKn) * 102)} kg-f)`;
 }
 window.calculateOutdoorLedSpecs = calculateOutdoorLedSpecs;
+
+// ==========================================
+// UNIFIED LED & DV-LED VIDEO WALL STUDIO ENGINE
+// ==========================================
+
+var unifiedLedState = {
+  wallWidthMm: 4800,
+  wallHeightMm: 2700,
+  diagonalInches: 217.4,
+  aspectRatioDecimal: 1.7778,
+  aspectRatioString: '16:9',
+  aspectRatioLabel: '16:9 Native Standard',
+  aspectVariancePct: 0.0,
+  pitch: 1.25,
+  panelKey: '600x337.5',
+  cabW: 600,
+  cabH: 337.5,
+  customCabW: 600,
+  customCabH: 337.5,
+  customCabDepth: 65,
+  customCabWeight: 4.5,
+  customCabWatts: 120,
+  cols: 8,
+  rows: 8,
+  totalCabinets: 64,
+  resolutionW: 3840,
+  resolutionH: 2160,
+  totalPixels: 8294400,
+  typicalWatts: 3240,
+  peakWatts: 8294,
+  heatBtuHr: 28299,
+  acTons: 2.36,
+  activeSubMode: 'size' // 'size', 'res', 'grid', 'library', 'thermal'
+};
+
+// 1. Precise Aspect Ratio Calculation Engine
+function calculateAspectRatioDetails(widthMm, heightMm) {
+  var w = parseFloat(widthMm) || 4800;
+  var h = parseFloat(heightMm) || 2700;
+  if (w <= 0 || h <= 0) {
+    w = 4800;
+    h = 2700;
+  }
+
+  var decimal = w / h;
+
+  var STANDARDS = [
+    { key: '16:9', ratio: 16 / 9, name: '16:9 Native Standard (1080p, 4K UHD, 8K)', cat: 'Standard HD/UHD Video Canvas' },
+    { key: '16:10', ratio: 16 / 10, name: '16:10 Presentation & WUXGA', cat: 'Corporate / Data Display Canvas' },
+    { key: '21:9', ratio: 21 / 9, name: '21:9 Ultrawide (Teams Front Row)', cat: 'Signature UC Workspace Canvas' },
+    { key: '32:9', ratio: 32 / 9, name: '32:9 Super Ultrawide Dual Canvas', cat: 'Command & Control / Panoramic' },
+    { key: '4:3', ratio: 4 / 3, name: '4:3 Classic Format', cat: 'Legacy / Technical Standard' },
+    { key: '1:1', ratio: 1 / 1, name: '1:1 Symmetrical Square', cat: 'Architectural / Column Banner' },
+    { key: '9:16', ratio: 9 / 16, name: '9:16 Portrait Orientation', cat: 'Digital Signage / Totem Display' },
+    { key: '3:2', ratio: 3 / 2, name: '3:2 High-Resolution Surface', cat: 'Studio Display Format' }
+  ];
+
+  var bestMatch = STANDARDS[0];
+  var minDiff = Math.abs(decimal - STANDARDS[0].ratio);
+
+  STANDARDS.forEach(function(std) {
+    var diff = Math.abs(decimal - std.ratio);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestMatch = std;
+    }
+  });
+
+  var variancePct = (minDiff / bestMatch.ratio) * 100;
+  var isExact = variancePct < 0.25;
+  var isClose = variancePct < 2.5;
+
+  function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+  var approxW = Math.round(w / 10);
+  var approxH = Math.round(h / 10);
+  var div = gcd(approxW, approxH);
+  var fracW = approxW / div;
+  var fracH = approxH / div;
+  var simplifiedFraction = (fracW <= 64 && fracH <= 64) ? (fracW + ':' + fracH) : (decimal.toFixed(2) + ':1');
+
+  var varianceBadge = isExact ? 'Exact ' + bestMatch.key :
+                      (isClose ? bestMatch.key + ' (~' + variancePct.toFixed(1) + '% var)' :
+                      decimal.toFixed(2) + ':1 Custom');
+
+  return {
+    decimal: decimal,
+    decimalStr: decimal.toFixed(2) + ' : 1',
+    ratioKey: bestMatch.key,
+    standardName: bestMatch.name,
+    category: bestMatch.cat,
+    variancePct: variancePct,
+    varianceBadge: varianceBadge,
+    isExact: isExact,
+    isClose: isClose,
+    simplifiedFraction: simplifiedFraction,
+    // Instant snap target dimensions
+    snapH169: Math.round(w * (9.0 / 16.0)),
+    snapW169: Math.round(h * (16.0 / 9.0)),
+    snapH219: Math.round(w * (9.0 / 21.0)),
+    snapW219: Math.round(h * (21.0 / 9.0)),
+    snapH1610: Math.round(w * (10.0 / 16.0)),
+    snapW1610: Math.round(h * (16.0 / 10.0)),
+    snapH329: Math.round(w * (9.0 / 32.0)),
+    snapW329: Math.round(h * (32.0 / 9.0)),
+    snapH43: Math.round(w * (3.0 / 4.0)),
+    snapW43: Math.round(h * (4.0 / 3.0))
+  };
+}
+
+// Helper to get active cabinet dimensions from panel selection or custom inputs
+function getActiveCabinetDimensions() {
+  var pSelect = document.getElementById('unifiedLedPanelSelect');
+  var pKey = pSelect ? pSelect.value : (unifiedLedState.panelKey || '600x337.5');
+  if (pKey === 'custom') {
+    var cw = parseFloat(document.getElementById('customPanelWidthMm')?.value) || unifiedLedState.customCabW || 600;
+    var ch = parseFloat(document.getElementById('customPanelHeightMm')?.value) || unifiedLedState.customCabH || 337.5;
+    return { w: cw, h: ch };
+  }
+  if (pKey === 'samsung_the_wall' || pKey === '806.4x453.6') return { w: 806.4, h: 453.6 };
+  if (pKey === 'sony_crystal_led' || pKey === '403.2x453.6') return { w: 403.2, h: 453.6 };
+  if (pKey === '1000x500') return { w: 1000, h: 500 };
+  if (pKey === '500x500') return { w: 500, h: 500 };
+  if (pKey === '500x1000') return { w: 500, h: 1000 };
+  if (pKey === '480x270') return { w: 480, h: 270 };
+  if (pKey === '250x250') return { w: 250, h: 250 };
+  if (typeof GLOBAL_PANELS !== 'undefined' && GLOBAL_PANELS[pKey]) {
+    return { w: GLOBAL_PANELS[pKey].w, h: GLOBAL_PANELS[pKey].h };
+  }
+  return { w: 600, h: 337.5 };
+}
+
+// Handler when user modifies Physical Wall Dimensions (Width or Height)
+function onUnifiedSizeInputChanged(axis) {
+  unifiedLedState.activeSubMode = 'size';
+  var inpW = document.getElementById('unifiedLedWidthMm');
+  var inpH = document.getElementById('unifiedLedHeightMm');
+  var userW = parseFloat(inpW?.value);
+  var userH = parseFloat(inpH?.value);
+  if (!userW || userW < 100) userW = 4800;
+  if (!userH || userH < 100) userH = 2700;
+
+  var cab = getActiveCabinetDimensions();
+  var cols = Math.max(1, Math.round(userW / cab.w));
+  var rows = Math.max(1, Math.round(userH / cab.h));
+
+  unifiedLedState.cols = cols;
+  unifiedLedState.rows = rows;
+  unifiedLedState.totalCabinets = cols * rows;
+  unifiedLedState.wallWidthMm = userW;
+  unifiedLedState.wallHeightMm = userH;
+
+  var inpGridCols = document.getElementById('unifiedGridColsInput');
+  var inpGridRows = document.getElementById('unifiedGridRowsInput');
+  if (inpGridCols && document.activeElement !== inpGridCols) inpGridCols.value = cols;
+  if (inpGridRows && document.activeElement !== inpGridRows) inpGridRows.value = rows;
+
+  calculateUnifiedLedStudio();
+}
+
+// Handler when user selects a different panel model or dimensions
+function onUnifiedPanelSelectChanged() {
+  var pKey = document.getElementById('unifiedLedPanelSelect')?.value || '600x337.5';
+  unifiedLedState.panelKey = pKey;
+  var cab = getActiveCabinetDimensions();
+  unifiedLedState.cabW = cab.w;
+  unifiedLedState.cabH = cab.h;
+
+  var customBox = document.getElementById('customPanelSettingsCard');
+  if (customBox) customBox.style.display = (pKey === 'custom') ? 'block' : 'none';
+
+  var currentW = parseFloat(document.getElementById('unifiedLedWidthMm')?.value) || unifiedLedState.wallWidthMm || 4800;
+  var currentH = parseFloat(document.getElementById('unifiedLedHeightMm')?.value) || unifiedLedState.wallHeightMm || 2700;
+
+  var cols = Math.max(1, Math.round(currentW / cab.w));
+  var rows = Math.max(1, Math.round(currentH / cab.h));
+
+  unifiedLedState.cols = cols;
+  unifiedLedState.rows = rows;
+  unifiedLedState.totalCabinets = cols * rows;
+
+  if (unifiedLedState.activeSubMode === 'grid') {
+    unifiedLedState.wallWidthMm = Math.round(cols * cab.w);
+    unifiedLedState.wallHeightMm = Math.round(rows * cab.h);
+    var inpW = document.getElementById('unifiedLedWidthMm');
+    var inpH = document.getElementById('unifiedLedHeightMm');
+    if (inpW && document.activeElement !== inpW) inpW.value = unifiedLedState.wallWidthMm;
+    if (inpH && document.activeElement !== inpH) inpH.value = unifiedLedState.wallHeightMm;
+  }
+
+  var inpGridCols = document.getElementById('unifiedGridColsInput');
+  var inpGridRows = document.getElementById('unifiedGridRowsInput');
+  if (inpGridCols) inpGridCols.value = cols;
+  if (inpGridRows) inpGridRows.value = rows;
+
+  calculateUnifiedLedStudio();
+}
+
+// 2. Snap Wall to Exact Standard Aspect Ratio
+function snapWallToAspectRatio(ratioStr, lockAxis) {
+  lockAxis = lockAxis || 'width'; // default lock width and adjust height
+  unifiedLedState.activeSubMode = 'size';
+  var currentW = unifiedLedState.wallWidthMm || 4800;
+  var currentH = unifiedLedState.wallHeightMm || 2700;
+  var r = 16.0 / 9.0;
+
+  if (ratioStr === '16:9') r = 16.0 / 9.0;
+  else if (ratioStr === '21:9') r = 21.0 / 9.0;
+  else if (ratioStr === '16:10') r = 16.0 / 10.0;
+  else if (ratioStr === '32:9') r = 32.0 / 9.0;
+  else if (ratioStr === '4:3') r = 4.0 / 3.0;
+  else if (ratioStr === '1:1') r = 1.0;
+
+  if (lockAxis === 'height') {
+    currentW = Math.round(currentH * r);
+  } else {
+    currentH = Math.round(currentW / r);
+  }
+
+  unifiedLedState.wallWidthMm = currentW;
+  unifiedLedState.wallHeightMm = currentH;
+
+  // Sync inputs
+  var inpW = document.getElementById('unifiedLedWidthMm');
+  var inpH = document.getElementById('unifiedLedHeightMm');
+  var inpLegacyW = document.getElementById('ledWidthInMm');
+  var inpLegacyH = document.getElementById('ledHeightInMm');
+  var inpM2W = document.getElementById('m2-wall-width-mm');
+  var inpm2H = document.getElementById('m2-wall-height-mm');
+
+  if (inpW) inpW.value = currentW;
+  if (inpH) inpH.value = currentH;
+  if (inpLegacyW) inpLegacyW.value = currentW;
+  if (inpLegacyH) inpLegacyH.value = currentH;
+  if (inpM2W) inpM2W.value = currentW;
+  if (inpm2H) inpm2H.value = currentH;
+
+  calculateUnifiedLedStudio();
+}
+
+// 3. Switch Unified LED Studio Sizing & Calculation Modes
+function switchUnifiedLedMode(modeKey) {
+  unifiedLedState.activeSubMode = modeKey;
+
+  var modes = ['size', 'res', 'grid', 'library', 'thermal'];
+  modes.forEach(function(m) {
+    var btn = document.getElementById('btnMode_' + m);
+    var sec = document.getElementById('sectionLedMode_' + m);
+    if (btn) {
+      if (m === modeKey) {
+        btn.className = 'btn btn-warning active unified-led-mode-btn font-mono fw-bold px-3 py-1.5 shadow-xs text-dark';
+      } else {
+        btn.className = 'btn btn-outline-secondary unified-led-mode-btn font-mono fw-bold px-3 py-1.5 shadow-xs';
+      }
+    }
+    if (sec) {
+      sec.style.display = (m === modeKey) ? 'block' : 'none';
+    }
+  });
+
+  calculateUnifiedLedStudio();
+}
+
+// 4. Update the Master Executive Design HUD (Always prominently visible)
+function updateMasterDesignHud(state) {
+  var s = state || unifiedLedState;
+
+  // Wall Dimensions & Area
+  var elDims = document.getElementById('hudWallDimensions');
+  var elDimsFt = document.getElementById('hudWallDimensionsFt');
+  var elAreaBadge = document.getElementById('hudWallAreaBadge');
+  var elDiag = document.getElementById('hudWallDiagonal');
+
+  var wM = s.wallWidthMm / 1000.0;
+  var hM = s.wallHeightMm / 1000.0;
+  var areaM2 = wM * hM;
+  var areaSqft = areaM2 * 10.7639;
+  var diagMm = Math.sqrt(s.wallWidthMm * s.wallWidthMm + s.wallHeightMm * s.wallHeightMm);
+  var diagIn = diagMm / 25.4;
+
+  if (elDims) elDims.innerHTML = wM.toFixed(2) + ' &times; ' + hM.toFixed(2) + ' m <span class="small font-mono text-slate-400" style="font-size:0.75rem;">(' + s.wallWidthMm + '&times;' + s.wallHeightMm + ' mm)</span>';
+  if (elDimsFt) elDimsFt.innerHTML = (wM * 3.28084).toFixed(2) + ' &times; ' + (hM * 3.28084).toFixed(2) + ' ft';
+  if (elAreaBadge) elAreaBadge.textContent = areaM2.toFixed(2) + ' m² (' + areaSqft.toFixed(1) + ' sq ft)';
+  if (elDiag) elDiag.textContent = diagIn.toFixed(1) + '" Diag (' + (diagMm / 1000).toFixed(2) + ' m)';
+
+  // Aspect Ratio
+  var ar = calculateAspectRatioDetails(s.wallWidthMm, s.wallHeightMm);
+  var elArMain = document.getElementById('hudAspectRatioMain');
+  var elArBadge = document.getElementById('hudAspectVarianceBadge');
+  var elArClass = document.getElementById('hudAspectClassification');
+
+  if (elArMain) elArMain.textContent = ar.decimalStr + ' (' + ar.simplifiedFraction + ')';
+  if (elArBadge) {
+    elArBadge.textContent = ar.varianceBadge;
+    elArBadge.className = ar.isExact ? 'badge bg-success font-mono fw-bold' : (ar.isClose ? 'badge bg-warning text-dark font-mono fw-bold' : 'badge bg-secondary font-mono');
+  }
+  if (elArClass) elArClass.textContent = ar.category + ' • ' + ar.standardName;
+
+  // Update Aspect Ratio in live calculator card as well
+  var elLiveArLabel = document.getElementById('liveCalculatedAspectRatioLabel');
+  if (elLiveArLabel) {
+    elLiveArLabel.innerHTML = 'Exact Aspect Ratio: <strong class="text-warning">' + ar.decimalStr + '</strong> (' + ar.simplifiedFraction + ') &bull; Closest Standard: <span class="badge bg-primary text-white ms-1">' + ar.standardName + '</span>';
+  }
+
+  // Resolution & Pixels
+  var elResPix = document.getElementById('hudResolutionPixels');
+  var elResBadge = document.getElementById('hudResBadge');
+  var elMegapixels = document.getElementById('hudTotalMegapixels');
+
+  if (elResPix) elResPix.innerHTML = s.resolutionW + ' &times; ' + s.resolutionH + ' <span class="small font-mono text-slate-400" style="font-size:0.75rem;">Pixels</span>';
+  if (elResBadge) {
+    var resLabel = 'Custom';
+    if (s.resolutionW >= 7680 && s.resolutionH >= 4320) resLabel = '8K UHD';
+    else if (s.resolutionW >= 5120 && s.resolutionH >= 2160) resLabel = '21:9 5K';
+    else if (s.resolutionW >= 3840 && s.resolutionH >= 2160) resLabel = '4K UHD';
+    else if (s.resolutionW >= 2560 && s.resolutionH >= 1440) resLabel = '1440p QHD';
+    else if (s.resolutionW >= 1920 && s.resolutionH >= 1080) resLabel = 'Full HD 1080p';
+    else if (s.resolutionW >= 1280 && s.resolutionH >= 720) resLabel = '720p HD';
+    elResBadge.textContent = resLabel;
+  }
+  var mp = (s.totalPixels / 1000000.0).toFixed(2);
+  var pxPerSqm = areaM2 > 0 ? Math.round(s.totalPixels / areaM2) : 0;
+  if (elMegapixels) elMegapixels.textContent = mp + ' Megapixels (' + pxPerSqm.toLocaleString() + ' px/m²)';
+
+  // Panels Array
+  var elGrid = document.getElementById('hudGridColsRows');
+  var elPanelsBadge = document.getElementById('hudPanelsTotalBadge');
+  var elModel = document.getElementById('hudPanelModelName');
+
+  if (elGrid) elGrid.textContent = s.cols + ' Cols × ' + s.rows + ' Rows';
+  var spares = Math.max(2, Math.ceil(s.totalCabinets * 0.05));
+  if (elPanelsBadge) elPanelsBadge.textContent = s.totalCabinets + ' Panels (+' + spares + ' Spares Rec.)';
+  var pName = (GLOBAL_PANELS[s.panelKey] ? GLOBAL_PANELS[s.panelKey].name + ' (' + GLOBAL_PANELS[s.panelKey].desc + ')' : s.cabW + '×' + s.cabH + ' mm Custom Panel');
+  if (elModel) elModel.textContent = pName;
+
+  // Pixel Pitch & Acuity
+  var elPitch = document.getElementById('hudPitchValue');
+  var elPitchBadge = document.getElementById('hudPitchBadge');
+  var elAcuity = document.getElementById('hudAcuityDistance');
+
+  if (elPitch) elPitch.textContent = 'P ' + s.pitch.toFixed(2) + ' mm';
+  if (elPitchBadge) elPitchBadge.textContent = 'P ' + s.pitch.toFixed(2) + ' mm';
+  var minAcuityM = (s.pitch * 1.0).toFixed(1);
+  var optAcuityM = (s.pitch * 3.44).toFixed(1);
+  if (elAcuity) elAcuity.textContent = '1-Arcmin Acuity: ' + minAcuityM + ' m – ' + optAcuityM + ' m (' + (minAcuityM * 3.28).toFixed(1) + '–' + (optAcuityM * 3.28).toFixed(1) + ' ft)';
+}
+
+// 5. Unified LED Studio Master Calculation
+function calculateUnifiedLedStudio() {
+  // If active element is width or height input, lock mode to 'size'
+  var activeElId = (typeof document !== 'undefined' && document.activeElement) ? document.activeElement.id : '';
+  if (activeElId === 'unifiedLedWidthMm' || activeElId === 'unifiedLedHeightMm') {
+    unifiedLedState.activeSubMode = 'size';
+  }
+
+  // Read current active panel dimensions
+  var pKey = document.getElementById('unifiedLedPanelSelect')?.value || unifiedLedState.panelKey || '600x337.5';
+  unifiedLedState.panelKey = pKey;
+
+  var cab = getActiveCabinetDimensions();
+  var cabW = cab.w;
+  var cabH = cab.h;
+  unifiedLedState.cabW = cabW;
+  unifiedLedState.cabH = cabH;
+
+  var customBox = document.getElementById('customPanelSettingsCard');
+  if (customBox) customBox.style.display = (pKey === 'custom') ? 'block' : 'none';
+
+  var p = parseFloat(document.getElementById('unifiedLedPitchSelect')?.value) || unifiedLedState.pitch || 1.25;
+  unifiedLedState.pitch = p;
+
+  var mode = unifiedLedState.activeSubMode || 'size';
+
+  if (mode === 'size') {
+    // Mode 1: Physical Size Inputs
+    var targetW = parseFloat(document.getElementById('unifiedLedWidthMm')?.value) || unifiedLedState.wallWidthMm || 4800;
+    var targetH = parseFloat(document.getElementById('unifiedLedHeightMm')?.value) || unifiedLedState.wallHeightMm || 2700;
+
+    unifiedLedState.wallWidthMm = targetW;
+    unifiedLedState.wallHeightMm = targetH;
+
+    var cols = Math.max(1, Math.round(targetW / cabW));
+    var rows = Math.max(1, Math.round(targetH / cabH));
+    unifiedLedState.cols = cols;
+    unifiedLedState.rows = rows;
+    unifiedLedState.totalCabinets = cols * rows;
+
+    // Sync grid inputs
+    var inpGridCols = document.getElementById('unifiedGridColsInput');
+    var inpGridRows = document.getElementById('unifiedGridRowsInput');
+    if (inpGridCols && document.activeElement !== inpGridCols) inpGridCols.value = cols;
+    if (inpGridRows && document.activeElement !== inpGridRows) inpGridRows.value = rows;
+
+    var cabPixW = Math.round(cabW / p);
+    var cabPixH = Math.round(cabH / p);
+    unifiedLedState.resolutionW = cols * cabPixW;
+    unifiedLedState.resolutionH = rows * cabPixH;
+    unifiedLedState.totalPixels = unifiedLedState.resolutionW * unifiedLedState.resolutionH;
+
+    // Update live aspect ratio badge in Mode 1
+    var arDetails = calculateAspectRatioDetails(targetW, targetH);
+    var elLiveArBadge = document.getElementById('liveCalculatedRatioBadge');
+    var elLiveArLabel = document.getElementById('liveCalculatedAspectRatioLabel');
+    if (elLiveArBadge) {
+      elLiveArBadge.textContent = arDetails.decimalStr + ' (' + arDetails.simplifiedFraction + ')';
+    }
+    if (elLiveArLabel) {
+      elLiveArLabel.innerHTML = 'Exact Aspect Ratio: <strong class="text-warning">' + arDetails.decimalStr + '</strong> (' + arDetails.simplifiedFraction + ') &bull; Closest Standard: <span class="badge bg-primary text-white ms-1">' + (arDetails.standardName || arDetails.ratioKey) + '</span>';
+    }
+
+  } else if (mode === 'res') {
+    // Mode 2: Target Resolution
+    var resKey = document.getElementById('unifiedTargetResSelect')?.value || '4k';
+    var resPreset = RESOLUTION_PRESETS[resKey] || RESOLUTION_PRESETS['4k'];
+    var theoW = resPreset.w * p;
+    var theoH = resPreset.h * p;
+
+    var cols = Math.max(1, Math.round(theoW / cabW));
+    var rows = Math.max(1, Math.round(theoH / cabH));
+    unifiedLedState.cols = cols;
+    unifiedLedState.rows = rows;
+    unifiedLedState.totalCabinets = cols * rows;
+
+    unifiedLedState.wallWidthMm = Math.round(cols * cabW);
+    unifiedLedState.wallHeightMm = Math.round(rows * cabH);
+
+    // Sync size and grid inputs
+    var inpW = document.getElementById('unifiedLedWidthMm');
+    var inpH = document.getElementById('unifiedLedHeightMm');
+    if (inpW) inpW.value = unifiedLedState.wallWidthMm;
+    if (inpH) inpH.value = unifiedLedState.wallHeightMm;
+    var inpGridCols = document.getElementById('unifiedGridColsInput');
+    var inpGridRows = document.getElementById('unifiedGridRowsInput');
+    if (inpGridCols) inpGridCols.value = cols;
+    if (inpGridRows) inpGridRows.value = rows;
+
+    var cabPixW = Math.round(cabW / p);
+    var cabPixH = Math.round(cabH / p);
+    unifiedLedState.resolutionW = cols * cabPixW;
+    unifiedLedState.resolutionH = rows * cabPixH;
+    unifiedLedState.totalPixels = unifiedLedState.resolutionW * unifiedLedState.resolutionH;
+
+  } else if (mode === 'grid') {
+    // Mode 3: Grid Cols × Rows
+    var cols = parseInt(document.getElementById('unifiedGridColsInput')?.value, 10) || unifiedLedState.cols || 8;
+    var rows = parseInt(document.getElementById('unifiedGridRowsInput')?.value, 10) || unifiedLedState.rows || 4;
+
+    unifiedLedState.cols = cols;
+    unifiedLedState.rows = rows;
+    unifiedLedState.totalCabinets = cols * rows;
+
+    unifiedLedState.wallWidthMm = Math.round(cols * cabW);
+    unifiedLedState.wallHeightMm = Math.round(rows * cabH);
+
+    // Sync size inputs
+    var inpW = document.getElementById('unifiedLedWidthMm');
+    var inpH = document.getElementById('unifiedLedHeightMm');
+    if (inpW && document.activeElement !== inpW) inpW.value = unifiedLedState.wallWidthMm;
+    if (inpH && document.activeElement !== inpH) inpH.value = unifiedLedState.wallHeightMm;
+
+    var cabPixW = Math.round(cabW / p);
+    var cabPixH = Math.round(cabH / p);
+    unifiedLedState.resolutionW = cols * cabPixW;
+    unifiedLedState.resolutionH = rows * cabPixH;
+    unifiedLedState.totalPixels = unifiedLedState.resolutionW * unifiedLedState.resolutionH;
+  }
+
+  // Update Feet labels
+  var lblWFt = document.getElementById('lblWidthFt');
+  var lblHFt = document.getElementById('lblHeightFt');
+  if (lblWFt) lblWFt.textContent = (unifiedLedState.wallWidthMm / 304.8).toFixed(2) + ' ft';
+  if (lblHFt) lblHFt.textContent = (unifiedLedState.wallHeightMm / 304.8).toFixed(2) + ' ft';
+
+  // Update Mode 3 grid stats callout
+  var resPanels = document.getElementById('resGridTotalPanels');
+  var resAr = document.getElementById('resGridAspectRatio');
+  var resPix = document.getElementById('resGridPixels');
+  if (resPanels) resPanels.textContent = (unifiedLedState.cols * unifiedLedState.rows) + ' Cabinets (' + unifiedLedState.cols + 'W × ' + unifiedLedState.rows + 'H)';
+  if (resAr) {
+    var ar = calculateAspectRatioDetails(unifiedLedState.wallWidthMm, unifiedLedState.wallHeightMm);
+    resAr.textContent = ar.decimalStr + ' (' + ar.simplifiedFraction + ')';
+  }
+  if (resPix) resPix.textContent = unifiedLedState.resolutionW + ' × ' + unifiedLedState.resolutionH + ' px';
+
+  // Power & Heat Calculation
+  var areaM2 = (unifiedLedState.wallWidthMm * unifiedLedState.wallHeightMm) / 1000000.0;
+  var densityWatts = parseFloat(document.getElementById('unifiedPowerDensityInput')?.value) || 250;
+  var maxDensityWatts = densityWatts * 2.5;
+
+  unifiedLedState.typicalWatts = Math.round(areaM2 * densityWatts);
+  unifiedLedState.peakWatts = Math.round(areaM2 * maxDensityWatts);
+  unifiedLedState.heatBtuHr = Math.round(unifiedLedState.typicalWatts * 3.41214);
+  unifiedLedState.acTons = (unifiedLedState.heatBtuHr / 12000.0).toFixed(2);
+
+  // Update Master HUD
+  updateMasterDesignHud(unifiedLedState);
+
+  // Update Mode 5 Electrical, HVAC & Heatmap SVG to match entered wall size
+  if (typeof updateLedHeatmapAndThermal === 'function') {
+    try {
+      updateLedHeatmapAndThermal();
+    } catch(e) {
+      console.warn('Error updating LED heatmap:', e);
+    }
+  }
+
+  // Draw 2D Array SVG with exact reactive columns & rows
+  if (typeof drawArraySVG === 'function') {
+    drawArraySVG(unifiedLedState.cols, unifiedLedState.rows, unifiedLedState.wallWidthMm, unifiedLedState.wallHeightMm, cabW, cabH, '#38bdf8');
+  }
+
+  // Draw Sightline Screen Outline Diagram
+  if (typeof renderLedScreenSvg === 'function') {
+    var diagIn = Math.sqrt(unifiedLedState.wallWidthMm * unifiedLedState.wallWidthMm + unifiedLedState.wallHeightMm * unifiedLedState.wallHeightMm) / 25.4;
+    var ar = calculateAspectRatioDetails(unifiedLedState.wallWidthMm, unifiedLedState.wallHeightMm);
+    renderLedScreenSvg(unifiedLedState.wallWidthMm, unifiedLedState.wallHeightMm, diagIn, ar.simplifiedFraction);
+  }
+
+  // Update Comparative Multi-Panel Table
+  if (typeof renderMode2MultiPanelTable === 'function') {
+    renderMode2MultiPanelTable(unifiedLedState.wallWidthMm, unifiedLedState.wallHeightMm, pKey, (unifiedLedState.wallWidthMm/1920).toFixed(2), (unifiedLedState.wallWidthMm/3840).toFixed(2), (unifiedLedState.pitch*1.5).toFixed(2));
+  }
+}
+
+// 6. Stepper adjustments for Columns & Rows (Mode 3)
+function adjustUnifiedGrid(type, delta) {
+  var inputId = (type === 'cols') ? 'unifiedGridColsInput' : 'unifiedGridRowsInput';
+  var inp = document.getElementById(inputId);
+  if (!inp) return;
+  var val = parseInt(inp.value, 10) || 1;
+  val = Math.max(1, Math.min(64, val + delta));
+  inp.value = val;
+  if (type === 'cols') unifiedLedState.cols = val;
+  else unifiedLedState.rows = val;
+  unifiedLedState.activeSubMode = 'grid';
+  var cab = getActiveCabinetDimensions();
+  unifiedLedState.wallWidthMm = Math.round(unifiedLedState.cols * cab.w);
+  unifiedLedState.wallHeightMm = Math.round(unifiedLedState.rows * cab.h);
+  var inpW = document.getElementById('unifiedLedWidthMm');
+  var inpH = document.getElementById('unifiedLedHeightMm');
+  if (inpW) inpW.value = unifiedLedState.wallWidthMm;
+  if (inpH) inpH.value = unifiedLedState.wallHeightMm;
+  calculateUnifiedLedStudio();
+}
+
+// 6b. Direct Grid input change listener
+function onGridInputChanged(type) {
+  var inpCols = document.getElementById('unifiedGridColsInput');
+  var inpRows = document.getElementById('unifiedGridRowsInput');
+  var cols = Math.max(1, Math.min(64, parseInt(inpCols?.value, 10) || 8));
+  var rows = Math.max(1, Math.min(64, parseInt(inpRows?.value, 10) || 4));
+  unifiedLedState.cols = cols;
+  unifiedLedState.rows = rows;
+  unifiedLedState.activeSubMode = 'grid';
+  var cab = getActiveCabinetDimensions();
+  unifiedLedState.wallWidthMm = Math.round(cols * cab.w);
+  unifiedLedState.wallHeightMm = Math.round(rows * cab.h);
+  var inpW = document.getElementById('unifiedLedWidthMm');
+  var inpH = document.getElementById('unifiedLedHeightMm');
+  if (inpW) inpW.value = unifiedLedState.wallWidthMm;
+  if (inpH) inpH.value = unifiedLedState.wallHeightMm;
+  calculateUnifiedLedStudio();
+}
+
+// 7. Custom Panel Dimensions Handler
+function onCustomPanelDimChanged() {
+  unifiedLedState.customCabW = parseFloat(document.getElementById('customPanelWidthMm')?.value) || 600;
+  unifiedLedState.customCabH = parseFloat(document.getElementById('customPanelHeightMm')?.value) || 337.5;
+  unifiedLedState.customCabDepth = parseFloat(document.getElementById('customPanelDepthMm')?.value) || 65;
+  unifiedLedState.customCabWeight = parseFloat(document.getElementById('customPanelWeightKg')?.value) || 4.5;
+  unifiedLedState.customCabWatts = parseFloat(document.getElementById('customPanelWattsInput')?.value) || 120;
+  calculateUnifiedLedStudio();
+}
+
+// 8. Export CAD SVG
+function exportLedWallCadSvg() {
+  var svgEl = document.querySelector('#arraySvgContainer svg') || document.querySelector('#ledWallSvgContainer svg');
+  if (!svgEl) {
+    alert('No active SVG found to export.');
+    return;
+  }
+  var svgData = new XMLSerializer().serializeToString(svgEl);
+  var blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var downloadLink = document.createElement('a');
+  downloadLink.href = url;
+  downloadLink.download = 'LED_Video_Wall_Architectural_Elevation_' + unifiedLedState.wallWidthMm + 'x' + unifiedLedState.wallHeightMm + 'mm.svg';
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
+}
+
+// Global Export bindings
+window.calculateAspectRatioDetails = calculateAspectRatioDetails;
+window.snapWallToAspectRatio = snapWallToAspectRatio;
+window.switchUnifiedLedMode = switchUnifiedLedMode;
+window.updateMasterDesignHud = updateMasterDesignHud;
+window.calculateUnifiedLedStudio = calculateUnifiedLedStudio;
+window.adjustUnifiedGrid = adjustUnifiedGrid;
+window.onGridInputChanged = onGridInputChanged;
+window.onCustomPanelDimChanged = onCustomPanelDimChanged;
+window.exportLedWallCadSvg = exportLedWallCadSvg;
+window.drawArraySVG = drawArraySVG;
+window.getActiveCabinetDimensions = getActiveCabinetDimensions;
+window.onUnifiedSizeInputChanged = onUnifiedSizeInputChanged;
+window.onUnifiedPanelSelectChanged = onUnifiedPanelSelectChanged;
+window.calcLedPowerAndThermal = updateLedHeatmapAndThermal;
+window.updateLedHeatmapAndThermal = updateLedHeatmapAndThermal;
+window.updateLedPowerFromDensity = updateLedPowerFromDensity;
+window.updateLedPowerFromCabinetWatts = updateLedPowerFromCabinetWatts;
+window.updateLedPowerFromWatts = updateLedPowerFromCabinetWatts;
+window.toggleLedHeatmap = toggleLedHeatmap;
+window.setLedThermalMode = setLedThermalMode;
+window.onHoverLedCabinet = onHoverLedCabinet;
+window.selectLedCabinet = selectLedCabinet;
+window.renderLedWallWithSocketsSvg = renderLedWallWithSocketsSvg;
+window.calculateLEDStudio = updateLedHeatmapAndThermal;
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      if (typeof calculateUnifiedLedStudio === 'function') {
+        try { calculateUnifiedLedStudio(); } catch(e) {}
+      }
+    }, 100);
+  });
+}

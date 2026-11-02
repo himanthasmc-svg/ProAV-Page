@@ -31,9 +31,13 @@ const scripts = [
   'src/scripts/tab1.js',
   'src/scripts/tab_ifpd.js',
   'src/scripts/tab2.js',
+  'src/scripts/wall_structure.js',
   'src/scripts/tab3_4_5.js',
+  'src/scripts/video_bar_studio.js',
+  'src/scripts/rack_design.js',
   'src/scripts/tab6_7.js',
   'src/scripts/tab8_9.js',
+  'src/scripts/budgeting.js',
   'src/scripts/tab10.js',
   'src/scripts/workspace_and_pdf.js'
 ].map(file => fs.readFileSync(file, 'utf8')).join('\n\n');
@@ -43,6 +47,10 @@ let indexHtml = fs.readFileSync('index.html', 'utf8');
 // Replace link to av-styles.css with inline style
 const styleTag = `<style>\n${avStyles}\n</style>`;
 indexHtml = indexHtml.replace('<link rel="stylesheet" href="/src/av-styles.css">', styleTag);
+
+// Replace local /three-bundle.min.js with CDN scripts so standalone HTML works anywhere
+const threeCdnTags = `<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>\n<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>`;
+indexHtml = indexHtml.replace('<script src="/three-bundle.min.js" defer></script>', threeCdnTags);
 
 // Replace script tags with single inline script (using function replacement to avoid $& / $' patterns expanding inside script code)
 const scriptTagsRegex = /<!-- Applet Core & Studio Scripts -->[\s\S]*?<\/body>/;
