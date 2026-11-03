@@ -3354,7 +3354,8 @@ function filterMatrixRooms(query) {
   var q = (query || '').toLowerCase().trim();
   var tbody = document.getElementById('matrixTableBody');
   if (!tbody) return;
-  var rows = Array.from(tbody.querySelectorAll('tr.matrix-room-row'));
+  var rows = Array.from(tbody.querySelectorAll('tr'));
+  var mobileCards = Array.from(document.querySelectorAll('#matrixMobileCardsContainer .matrix-room-card-col'));
   var badge = document.getElementById('matrixFilterCountBadge');
   var visibleCountEl = document.getElementById('matrixFilterVisibleCount');
   var totalCountEl = document.getElementById('matrixFilterTotalCount');
@@ -3362,31 +3363,37 @@ function filterMatrixRooms(query) {
   if (totalCountEl) totalCountEl.textContent = rows.length;
 
   if (!q) {
-    rows.forEach(function(tr) {
+    rows.forEach(function(tr, idx) {
       tr.style.display = '';
+      if (mobileCards[idx]) mobileCards[idx].style.display = '';
     });
-    if (badge) badge.classList.add('d-none');
+    if (badge) {
+      badge.className = 'badge bg-secondary font-mono';
+      badge.textContent = 'Showing All Rooms (' + rows.length + ')';
+    }
+    if (visibleCountEl) visibleCountEl.textContent = rows.length;
     return;
   }
 
   var terms = q.split(/\s+/).filter(Boolean);
   var visibleCount = 0;
 
-  rows.forEach(function(tr) {
+  rows.forEach(function(tr, idx) {
     var name = (tr.querySelector('.inp-name')?.value || '').toLowerCase();
     var floor = (tr.querySelector('.inp-floor')?.value || tr.dataset.floor || '').toLowerCase();
-    var purpose = (tr.querySelector('.inp-purpose')?.value || '').toLowerCase();
-    var dispDiag = (tr.querySelector('.out-calc-diag')?.textContent || '').toLowerCase();
-    var camModel = (tr.querySelector('.inp-cam-model')?.value || '').toLowerCase();
+    var purpose = (tr.querySelector('.inp-purpose')?.value || tr.querySelector('.sel-purpose')?.value || '').toLowerCase();
+    var dispDiag = (tr.querySelector('.out-calc-diag')?.textContent || tr.querySelector('.td-disp')?.innerText || '').toLowerCase();
+    var camModel = (tr.querySelector('.inp-cam-model')?.value || tr.querySelector('.sel-cam-model')?.value || '').toLowerCase();
     var camFraming = (tr.querySelector('.inp-cam-framing')?.value || '').toLowerCase();
     var framingBadge = (tr.querySelector('.out-framing-badge')?.textContent || '').toLowerCase();
     var camModeBadge = (tr.querySelector('.out-row-cam-mode-badge')?.textContent || '').toLowerCase();
-    var spkSize = (tr.querySelector('.inp-spk-size')?.value || '').toLowerCase();
+    var spkSize = (tr.querySelector('.inp-spk-size')?.value || tr.querySelector('.sel-spk-size')?.value || '').toLowerCase();
     var spkStatus = (tr.querySelector('.out-spk-status-box')?.textContent || '').toLowerCase();
-    var videoBar = (tr.querySelector('.inp-video-bar')?.value || '').toLowerCase();
+    var videoBar = (tr.querySelector('.inp-video-bar')?.value || tr.querySelector('.sel-vbar-model')?.value || '').toLowerCase();
     var note = (tr.querySelector('.inp-note')?.value || '').toLowerCase();
     var seats = (tr.querySelector('.inp-seats')?.value || '').toLowerCase();
     var status = tr.classList.contains('table-camera-warning-row') ? 'warning limit exceeded fail' : 'pass optimal normal active';
+    var fullRowText = tr.innerText.toLowerCase();
 
     // Aggregate all searchable attributes for this room
     var rowSearchableText = [
@@ -3405,7 +3412,8 @@ function filterMatrixRooms(query) {
       videoBar,
       note,
       seats + ' seats',
-      status
+      status,
+      fullRowText
     ].join(' ');
 
     var matches = terms.every(function(term) {
@@ -3414,14 +3422,24 @@ function filterMatrixRooms(query) {
 
     if (matches) {
       tr.style.display = '';
+      if (mobileCards[idx]) mobileCards[idx].style.display = '';
       visibleCount++;
     } else {
       tr.style.display = 'none';
+      if (mobileCards[idx]) mobileCards[idx].style.display = 'none';
     }
   });
 
   if (visibleCountEl) visibleCountEl.textContent = visibleCount;
-  if (badge) badge.classList.remove('d-none');
+  if (badge) {
+    if (visibleCount > 0) {
+      badge.className = 'badge bg-info text-dark font-mono';
+      badge.textContent = visibleCount + ' of ' + rows.length + ' Rooms Matched';
+    } else {
+      badge.className = 'badge bg-danger font-mono';
+      badge.textContent = '0 of ' + rows.length + ' Rooms Matched (No Results)';
+    }
+  }
 }
 
 function clearMatrixRoomFilter() {
@@ -3429,6 +3447,11 @@ function clearMatrixRoomFilter() {
   if (input) input.value = '';
   filterMatrixRooms('');
 }
+
+window.filterMatrixRooms = filterMatrixRooms;
+window.filterMatrixTableRooms = filterMatrixRooms;
+window.clearMatrixRoomFilter = clearMatrixRoomFilter;
+window.clearMatrixRoomSearch = clearMatrixRoomFilter;
 
 // =========================================================================
 // PER-ROW & BULK CAMERA MODE TOGGLE ENGINE (#matrixTable)

@@ -4504,13 +4504,55 @@ function calculateLumensForScreen(diagIn, aspect, gain, ambientLux, contrastProf
 function openRecommendedLumensModal() {
   var modalEl = document.getElementById('recommendedLumensModal');
   if (!modalEl) return;
-  var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-  modal.show();
+  if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+    var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl, {
+      backdrop: true,
+      keyboard: true,
+      focus: true
+    });
+    modal.show();
+  } else {
+    modalEl.classList.add('show');
+    modalEl.style.display = 'block';
+  }
+
+  // Click on background backdrop to close
+  modalEl.onclick = function(e) {
+    if (e.target === modalEl) {
+      closeRecommendedLumensModal();
+    }
+  };
 
   setTimeout(function() {
     updateProjBrightnessModalChart();
   }, 150);
 }
+
+function closeRecommendedLumensModal() {
+  var modalEl = document.getElementById('recommendedLumensModal');
+  if (!modalEl) return;
+  try {
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+      var bsModal = bootstrap.Modal.getInstance(modalEl);
+      if (bsModal) bsModal.hide();
+    }
+  } catch(e) {}
+  modalEl.classList.remove('show');
+  modalEl.style.display = 'none';
+  modalEl.setAttribute('aria-hidden', 'true');
+  modalEl.removeAttribute('aria-modal');
+
+  var backdrops = document.querySelectorAll('.modal-backdrop');
+  backdrops.forEach(function(b) {
+    if (b.parentNode) b.parentNode.removeChild(b);
+  });
+  document.body.classList.remove('modal-open');
+  document.body.style.removeProperty('overflow');
+  document.body.style.removeProperty('padding-right');
+}
+
+window.openRecommendedLumensModal = openRecommendedLumensModal;
+window.closeRecommendedLumensModal = closeRecommendedLumensModal;
 
 function updateProjBrightnessModalChart() {
   var aspect = document.getElementById('modalProjAspectSelect')?.value || '16:9';

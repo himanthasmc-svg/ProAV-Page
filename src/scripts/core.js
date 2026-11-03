@@ -52,31 +52,50 @@ function showSecurityNotice() {
   }
 }
 
-// Open Webmaster Auth Modal (Always strictly locked; password required every time)
+// Toggle HCMM Lock Popover attached directly below HCMM button
+function toggleHcmmLockPopup(e, forceOpen) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  var popup = document.getElementById('hcmmLockPopup');
+  if (!popup) return;
+
+  // Close other popups
+  var tabQrPopup = document.getElementById('tabQrCodePopup');
+  var wsPopup = document.getElementById('sharedWorkspacePopup');
+  if (tabQrPopup) tabQrPopup.style.display = 'none';
+  if (wsPopup) wsPopup.style.display = 'none';
+
+  var isCurrentlyVisible = popup.style.display === 'block';
+  var shouldOpen = forceOpen === true || !isCurrentlyVisible;
+
+  if (shouldOpen) {
+    popup.style.display = 'block';
+    // Strictly enforce locked state every time
+    sessionStorage.removeItem('hcmm_auth');
+    var gate = document.getElementById('sourceCodeLockGate');
+    var view = document.getElementById('sourceCodeUnlockedView');
+    var feedback = document.getElementById('sourceAuthFeedback');
+    var pwdInput = document.getElementById('sourceMasterPasswordInput');
+    var textarea = document.getElementById('sourceCodeTextarea');
+
+    if (gate) gate.style.display = 'block';
+    if (view) view.style.display = 'none';
+    if (feedback) {
+      feedback.className = 'small font-mono text-danger mb-3';
+      feedback.textContent = '';
+    }
+    if (pwdInput) {
+      pwdInput.value = '';
+      setTimeout(function() { pwdInput.focus(); }, 120);
+    }
+    if (textarea) textarea.value = '';
+  } else {
+    popup.style.display = 'none';
+  }
+}
+
+// Open Webmaster Auth (Always strictly locked; password required every time)
 function openSourceCodeAuthModal() {
-  var gate = document.getElementById('sourceCodeLockGate');
-  var view = document.getElementById('sourceCodeUnlockedView');
-  var feedback = document.getElementById('sourceAuthFeedback');
-  var pwdInput = document.getElementById('sourceMasterPasswordInput');
-  var textarea = document.getElementById('sourceCodeTextarea');
-
-  // Strictly enforce locked state every time
-  sessionStorage.removeItem('hcmm_auth');
-  if (gate) gate.style.display = 'block';
-  if (view) view.style.display = 'none';
-  if (feedback) {
-    feedback.className = 'small font-mono text-danger mb-3';
-    feedback.textContent = '';
-  }
-  if (pwdInput) pwdInput.value = '';
-  if (textarea) textarea.value = '';
-
-  var modalEl = document.getElementById('sourceCodeAuthModal');
-  if (modalEl && typeof bootstrap !== 'undefined') {
-    var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-    modal.show();
-    setTimeout(function() { if (pwdInput) pwdInput.focus(); }, 350);
-  }
+  toggleHcmmLockPopup(null, true);
 }
 
 // Toggle password visibility
@@ -589,5 +608,16 @@ function quickSearchStudios(query) {
 
 window.filterStudioCluster = filterStudioCluster;
 window.quickSearchStudios = quickSearchStudios;
+window.toggleHcmmLockPopup = toggleHcmmLockPopup;
+window.openSourceCodeAuthModal = openSourceCodeAuthModal;
+window.verifySourceCodePassword = verifySourceCodePassword;
+window.togglePasswordVisibility = togglePasswordVisibility;
+window.copyFullSourceCode = copyFullSourceCode;
+window.downloadSourceHtmlFile = downloadSourceHtmlFile;
+window.copyIframeEmbedCode = copyIframeEmbedCode;
+window.generateAndCopyStandaloneBundle = generateAndCopyStandaloneBundle;
+window.downloadStandaloneBundle = downloadStandaloneBundle;
+window.lockSourceCodeAgain = lockSourceCodeAgain;
+window.switchSourcePane = switchSourcePane;
 
 

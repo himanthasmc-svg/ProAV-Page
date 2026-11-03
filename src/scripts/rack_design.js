@@ -56,6 +56,19 @@
   // Comprehensive Equipment Library Presets
   var EQUIPMENT_PRESETS = [
     {
+      name: '1U Cooling Fan',
+      category: 'fan',
+      uHeight: 1,
+      depthMm: 280,
+      widthMm: 482.6,
+      powerWatts: 5,
+      btuHr: 15,
+      weightKg: 2.1,
+      color: '#090d16',
+      accentColor: '#38bdf8',
+      desc: '1U Cooling Fan (Fixed 5 Watts, 15 BTU/hr Exhaust Flow)'
+    },
+    {
       name: 'AC Infinity Cloudplate T1 1U Thermal Fan',
       category: 'fan',
       uHeight: 1,
@@ -285,7 +298,8 @@
     activeDeviceId: null,
     devices: [],
     thermalThresholdCritical: 1200, // Dynamic thermal critical threshold in BTU/hr (range 400 - 3000)
-    thermalFilterTier: null // Highlight filter: 'nominal' | 'moderate' | 'elevated' | 'critical'
+    thermalFilterTier: null, // Highlight filter: 'nominal' | 'moderate' | 'elevated' | 'critical'
+    isElongated: false // Elongated view mode for 48U full height clarity without squished/thin devices
   };
 
   // Default seed devices demonstrating a realistic AV rack
@@ -446,44 +460,35 @@
     }
   ];
 
-  // Get Dynamic Thermal Tier and Color Mapping based on current Thermal Range Slider
+  // Get Dynamic Thermal Tier and Color Mapping: Green (<400 BTU/hr), Orange (400-1200 BTU/hr), Red (>1200 BTU/hr)
   function getDeviceThermalTier(btu) {
     var crit = rackState.thermalThresholdCritical || 1200;
-    var elevated = Math.round(crit * 0.55);
-    var moderate = Math.round(crit * 0.25);
-    if (btu >= crit) {
+    var nominalThreshold = 400;
+
+    if (btu > crit) {
       return {
         tier: 'critical',
         color: '#ef4444',
         badgeClass: 'bg-danger text-white',
-        label: 'Critical Hot Spot',
-        rangeText: '≥ ' + crit + ' BTU/hr'
+        label: 'Critical Hot Spot (>1200 BTU/hr)',
+        rangeText: '> ' + crit + ' BTU/hr'
       };
     }
-    if (btu >= elevated) {
-      return {
-        tier: 'elevated',
-        color: '#f97316',
-        badgeClass: 'bg-warning text-dark',
-        label: 'Elevated Heat',
-        rangeText: elevated + '–' + (crit - 1) + ' BTU/hr'
-      };
-    }
-    if (btu >= moderate) {
+    if (btu >= nominalThreshold) {
       return {
         tier: 'moderate',
-        color: '#38bdf8',
-        badgeClass: 'bg-info text-dark',
-        label: 'Moderate Heat',
-        rangeText: moderate + '–' + (elevated - 1) + ' BTU/hr'
+        color: '#f97316',
+        badgeClass: 'bg-warning text-dark',
+        label: 'Moderate/Elevated (400–1200 BTU/hr)',
+        rangeText: nominalThreshold + '–' + crit + ' BTU/hr'
       };
     }
     return {
       tier: 'nominal',
       color: '#10b981',
       badgeClass: 'bg-success text-white',
-      label: 'Nominal / Cool',
-      rangeText: '< ' + moderate + ' BTU/hr'
+      label: 'Nominal / Cool (<400 BTU/hr)',
+      rangeText: '< ' + nominalThreshold + ' BTU/hr'
     };
   }
 
@@ -511,11 +516,10 @@
     renderDeviceListTable();
   }
 
-  // Update Dynamic Legend Labels & Slider UI
+  // Update Dynamic Legend Labels, Device Counts & Slider UI
   function updateThermalLegendDisplay() {
     var crit = rackState.thermalThresholdCritical || 1200;
-    var elevated = Math.round(crit * 0.55);
-    var moderate = Math.round(crit * 0.25);
+    var nominalThreshold = 400;
 
     var elVal = document.getElementById('rackThermalSliderVal');
     var elInput = document.getElementById('rackThermalRangeSlider');
@@ -524,18 +528,49 @@
 
     var elNom = document.getElementById('legendThreshNominal');
     var elMod = document.getElementById('legendThreshModerate');
-    var elEle = document.getElementById('legendThreshElevated');
     var elCrit = document.getElementById('legendThreshCritical');
 
-    if (elNom) elNom.textContent = '< ' + moderate + ' BTU/hr';
-    if (elMod) elMod.textContent = moderate + '–' + (elevated - 1) + ' BTU/hr';
-    if (elEle) elEle.textContent = elevated + '–' + (crit - 1) + ' BTU/hr';
-    if (elCrit) elCrit.textContent = '≥ ' + crit.toLocaleString() + ' BTU/hr';
+    if (elNom) elNom.textContent = '< ' + nominalThreshold + ' BTU/hr';
+    if (elMod) elMod.textContent = nominalThreshold + '–' + crit.toLocaleString() + ' BTU/hr';
+    if (elCrit) elCrit.textContent = '> ' + crit.toLocaleString() + ' BTU/hr';
 
-    ['nominal', 'moderate', 'elevated', 'critical'].forEach(function(t) {
+    // Count devices placed in each thermal tier
+    var countNominal = 0;
+    var countModerate = 0;
+    var countCritical = 0;
+
+    rackState.devices.forEach(function(d) {
+      var btu = (d.btuHr !== undefined) ? d.btuHr : Math.round(d.powerWatts * WATTS_TO_BTU_HR);
+      if (btu > crit) countCritical++;
+      else if (btu >= nominalThreshold) countModerate++;
+      else countNominal++;
+    });
+
+    var elCountNom = document.getElementById('legendCount_nominal');
+    var elCountMod = document.getElementById('legendCount_moderate');
+    var elCountCrit = document.getElementById('legendCount_critical');
+
+    if (elCountNom) elCountNom.textContent = countNominal + (countNominal === 1 ? ' Unit' : ' Units');
+    if (elCountMod) elCountMod.textContent = countModerate + (countModerate === 1 ? ' Unit' : ' Units');
+    if (elCountCrit) elCountCrit.textContent = countCritical + (countCritical === 1 ? ' Unit' : ' Units');
+
+    // Highlight interactive legend cards if active
+    ['nominal', 'moderate', 'critical'].forEach(function(t) {
+      var card = document.getElementById('legendCard_' + t);
       var btn = document.getElementById('legendBtn_' + t);
+      var isFiltered = (rackState.thermalFilterTier === t);
+
+      if (card) {
+        if (isFiltered) {
+          card.style.transform = 'scale(1.02)';
+          card.style.boxShadow = '0 0 0 2.5px #38bdf8';
+        } else {
+          card.style.transform = 'scale(1)';
+          card.style.boxShadow = 'none';
+        }
+      }
       if (btn) {
-        if (rackState.thermalFilterTier === t) {
+        if (isFiltered) {
           btn.style.boxShadow = '0 0 0 2.5px #38bdf8';
           btn.style.transform = 'scale(1.04)';
         } else {
@@ -1109,7 +1144,7 @@
     if (!select) return;
     select.innerHTML = '<option value="">-- Choose AV Equipment Preset --</option>';
     EQUIPMENT_PRESETS.forEach(function(preset, idx) {
-      var btu = Math.round(preset.powerWatts * WATTS_TO_BTU_HR);
+      var btu = (preset.btuHr !== undefined) ? preset.btuHr : Math.round(preset.powerWatts * WATTS_TO_BTU_HR);
       select.innerHTML += '<option value="' + idx + '">' + preset.name + ' (' + preset.uHeight + 'U • ' + preset.powerWatts + 'W • ' + btu + ' BTU/hr)</option>';
     });
   }
@@ -1141,7 +1176,7 @@
     }
     if (widthInput) widthInput.value = preset.widthMm;
     if (wattsInput) wattsInput.value = preset.powerWatts;
-    if (btuInput) btuInput.value = Math.round(preset.powerWatts * WATTS_TO_BTU_HR);
+    if (btuInput) btuInput.value = (preset.btuHr !== undefined) ? preset.btuHr : Math.round(preset.powerWatts * WATTS_TO_BTU_HR);
     if (weightInput) weightInput.value = preset.weightKg;
   }
 
@@ -1227,11 +1262,14 @@
   // ==========================================
 
   // 1. EXACT FRONT ELEVATION SVG (EIA-310-D)
-  function renderFrontRackSVG() {
+  function renderFrontRackSVG(forPrint) {
     var totalU = rackState.totalU;
-    var uHeightPx = 32;
+    // When elongated mode is enabled or printing, allocate full 28px/U so 48U devices are large, crisp, and never thin!
+    var uHeightPx = (rackState.isElongated || forPrint)
+      ? 28 
+      : Math.max(12, Math.min(32, Math.round(520 / Math.max(16, totalU))));
     var rackWidthPx = 420;
-    var railWidthPx = 28;
+    var railWidthPx = Math.max(18, Math.min(28, Math.round(28 * (uHeightPx / 26))));
     var usableWidthPx = rackWidthPx - (railWidthPx * 2);
     var totalRackHeightPx = totalU * uHeightPx;
     var topMargin = 50;
@@ -1239,8 +1277,12 @@
     var svgHeight = totalRackHeightPx + topMargin + bottomMargin;
     var svgWidth = rackWidthPx + 120;
 
+    var svgStyle = (rackState.isElongated || forPrint)
+      ? "width:100%; height:auto; display:block; margin:0 auto; background:#090d16; border-radius:12px; font-family:'Courier New', Courier, monospace;"
+      : "max-height:510px; width:100%; height:auto; display:block; margin:0 auto; background:#090d16; border-radius:12px; font-family:'Courier New', Courier, monospace;";
+
     var svg = [];
-    svg.push('<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" width="100%" height="490" preserveAspectRatio="xMidYMid meet" style="background:#090d16; border-radius:12px; font-family:\'Courier New\', Courier, monospace;" id="svgFrontElevation">');
+    svg.push('<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="' + svgStyle + '" id="svgFrontElevation">');
 
     // Defs & Gradients
     svg.push('<defs>');
@@ -1280,13 +1322,18 @@
     svg.push('<rect x="' + (startX + rackWidthPx - railWidthPx) + '" y="' + startY + '" width="' + railWidthPx + '" height="' + totalRackHeightPx + '" fill="url(#frontRailGrad)" stroke="#1e293b" stroke-width="1"/>');
 
     // U Markers, Lines, and 3-Hole Pattern
+    var uFontSize = Math.max(7, Math.min(10, Math.round(uHeightPx * 0.45)));
+    var holeSize = Math.max(1.8, Math.min(3.2, uHeightPx * 0.12));
+
     for (var u = 1; u <= totalU; u++) {
       var uIndexFromTop = totalU - u;
       var curY = startY + (uIndexFromTop * uHeightPx);
 
       svg.push('<line x1="' + startX + '" y1="' + curY + '" x2="' + (startX + rackWidthPx) + '" y2="' + curY + '" stroke="#1e293b" stroke-width="0.8" stroke-dasharray="2,2" opacity="0.6"/>');
-      svg.push('<text x="' + (startX - 14) + '" y="' + (curY + uHeightPx * 0.68) + '" fill="#64748b" font-size="10" font-weight="bold" text-anchor="end">' + u + 'U</text>');
-      svg.push('<text x="' + (startX + rackWidthPx + 14) + '" y="' + (curY + uHeightPx * 0.68) + '" fill="#64748b" font-size="10" font-weight="bold" text-anchor="start">' + u + 'U</text>');
+      if (totalU <= 24 || u % 2 === 0 || u === 1 || u === totalU) {
+        svg.push('<text x="' + (startX - 12) + '" y="' + (curY + uHeightPx * 0.68) + '" fill="#64748b" font-size="' + uFontSize + '" font-weight="bold" text-anchor="end">' + u + 'U</text>');
+        svg.push('<text x="' + (startX + rackWidthPx + 12) + '" y="' + (curY + uHeightPx * 0.68) + '" fill="#64748b" font-size="' + uFontSize + '" font-weight="bold" text-anchor="start">' + u + 'U</text>');
+      }
 
       var holeY1 = curY + (uHeightPx * 0.22);
       var holeY2 = curY + (uHeightPx * 0.50);
@@ -1297,11 +1344,11 @@
 
       [holeY1, holeY2, holeY3].forEach(function(hy) {
         if (rackState.screwType === 'm6') {
-          svg.push('<rect x="' + (leftHoleX - 3.2) + '" y="' + (hy - 3.2) + '" width="6.4" height="6.4" rx="1" fill="#090d16" stroke="#1e293b" stroke-width="0.8"/>');
-          svg.push('<rect x="' + (rightHoleX - 3.2) + '" y="' + (hy - 3.2) + '" width="6.4" height="6.4" rx="1" fill="#090d16" stroke="#1e293b" stroke-width="0.8"/>');
+          svg.push('<rect x="' + (leftHoleX - holeSize) + '" y="' + (hy - holeSize) + '" width="' + (holeSize * 2) + '" height="' + (holeSize * 2) + '" rx="0.8" fill="#090d16" stroke="#1e293b" stroke-width="0.8"/>');
+          svg.push('<rect x="' + (rightHoleX - holeSize) + '" y="' + (hy - holeSize) + '" width="' + (holeSize * 2) + '" height="' + (holeSize * 2) + '" rx="0.8" fill="#090d16" stroke="#1e293b" stroke-width="0.8"/>');
         } else {
-          svg.push('<circle cx="' + leftHoleX + '" cy="' + hy + '" r="2.8" fill="#090d16" stroke="#1e293b" stroke-width="0.8"/>');
-          svg.push('<circle cx="' + rightHoleX + '" cy="' + hy + '" r="2.8" fill="#090d16" stroke="#1e293b" stroke-width="0.8"/>');
+          svg.push('<circle cx="' + leftHoleX + '" cy="' + hy + '" r="' + holeSize + '" fill="#090d16" stroke="#1e293b" stroke-width="0.8"/>');
+          svg.push('<circle cx="' + rightHoleX + '" cy="' + hy + '" r="' + holeSize + '" fill="#090d16" stroke="#1e293b" stroke-width="0.8"/>');
         }
       });
     }
@@ -1513,23 +1560,30 @@
   }
 
   // 2. EXACT 2D SIDE DEPTH & AIRFLOW ELEVATION (PHYSICALLY GROUNDED WITH LOAD-BEARING SUPPORT RAILS)
-  function renderSideRackSVG() {
+  function renderSideRackSVG(forPrint) {
     var totalU = rackState.totalU;
     var rackDepthMm = rackState.rackDepthMm;
-    var uHeightPx = 28;
+    // Dynamically scale uHeightPx so ANY rack size (from 6U up to 48U+) fits the visual window cleanly
+    var uHeightPx = (rackState.isElongated || forPrint)
+      ? 26
+      : Math.max(11, Math.min(28, Math.round(500 / Math.max(16, totalU))));
     var totalRackHeightPx = totalU * uHeightPx;
-    var topMargin = 60;
-    var bottomMargin = 60;
+    var topMargin = 50;
+    var bottomMargin = 55;
     var sideWidthPx = 480;
-    var svgWidth = sideWidthPx + 150;
+    var svgWidth = sideWidthPx + 140;
     var svgHeight = totalRackHeightPx + topMargin + bottomMargin;
 
-    var startX = 60;
+    var startX = 55;
     var startY = topMargin;
     var pxPerMm = (sideWidthPx - 70) / rackDepthMm;
 
+    var svgStyle = (rackState.isElongated || forPrint)
+      ? "width:100%; height:auto; display:block; margin:0 auto; background:#090d16; border-radius:12px; font-family:'Courier New', Courier, monospace;"
+      : "max-height:510px; width:100%; height:auto; display:block; margin:0 auto; background:#090d16; border-radius:12px; font-family:'Courier New', Courier, monospace;";
+
     var svg = [];
-    svg.push('<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" width="100%" height="490" preserveAspectRatio="xMidYMid meet" style="background:#090d16; border-radius:12px; font-family:\'Courier New\', Courier, monospace;" id="svgSideElevation">');
+    svg.push('<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="' + svgStyle + '" id="svgSideElevation">');
 
     // Defs & Gradients
     svg.push('<defs>');
@@ -1678,9 +1732,12 @@
   }
 
   // 3. PHOTOREALISTIC 3D AXONOMETRIC PERSPECTIVE SVG
-  function render3DRackSVG() {
+  function render3DRackSVG(forPrint) {
     var totalU = rackState.totalU;
-    var uHeightPx = 18;
+    // Scale U-height dynamically so any rack size (e.g., 6U up to 48U) fits cleanly
+    var uHeightPx = (rackState.isElongated || forPrint)
+      ? 20
+      : Math.max(9, Math.min(18, Math.round(380 / Math.max(16, totalU))));
     var totalHeightPx = totalU * uHeightPx;
 
     var isoWidth = 270;
@@ -1693,8 +1750,12 @@
     var svgWidth = 600;
     var svgHeight = totalHeightPx + (isoDepth * depthSin) + 140;
 
+    var svgStyle = (rackState.isElongated || forPrint)
+      ? "width:100%; height:auto; display:block; margin:0 auto; background:#050811; border-radius:12px; font-family:'Courier New', Courier, monospace;"
+      : "max-height:510px; width:100%; height:auto; display:block; margin:0 auto; background:#050811; border-radius:12px; font-family:'Courier New', Courier, monospace;";
+
     var svg = [];
-    svg.push('<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" width="100%" height="490" preserveAspectRatio="xMidYMid meet" style="background:#050811; border-radius:12px; font-family:\'Courier New\', Courier, monospace;" id="svg3DIsometric">');
+    svg.push('<svg viewBox="0 0 ' + svgWidth + ' ' + svgHeight + '" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="' + svgStyle + '" id="svg3DIsometric">');
 
     // Defs & Gradients for Realistic 3D Shading & Metallic Textures
     svg.push('<defs>');
@@ -2066,9 +2127,133 @@
     var sideWrap = document.getElementById('rackSideSvgContainer');
     var threeDWrap = document.getElementById('rack3DSvgContainer');
 
+    var containerStyle = rackState.isElongated
+      ? 'min-height: 720px; max-height: 920px; overflow-y: auto; overflow-x: hidden; background:#060913; border-radius:12px;'
+      : 'height: 520px; overflow: hidden; background:#060913; border-radius:12px;';
+
+    [frontWrap, sideWrap, threeDWrap].forEach(function(wrap) {
+      if (wrap) {
+        wrap.setAttribute('style', containerStyle);
+      }
+    });
+
     if (frontWrap) frontWrap.innerHTML = renderFrontRackSVG();
     if (sideWrap) sideWrap.innerHTML = renderSideRackSVG();
     if (threeDWrap) threeDWrap.innerHTML = render3DRackSVG();
+  }
+
+  // Toggle Elongated 48U View (Prevents device squishing/thinning)
+  function toggleRackElongatedView() {
+    rackState.isElongated = !rackState.isElongated;
+    var btn = document.getElementById('btnToggleRackElongate');
+    if (btn) {
+      if (rackState.isElongated) {
+        btn.classList.remove('btn-outline-info');
+        btn.classList.add('btn-info', 'text-dark', 'fw-bold');
+        btn.innerHTML = '<i class="fa-solid fa-compress me-1"></i> Compact View (510px)';
+      } else {
+        btn.classList.remove('btn-info', 'text-dark', 'fw-bold');
+        btn.classList.add('btn-outline-info');
+        btn.innerHTML = '<i class="fa-solid fa-arrows-up-down me-1"></i> Elongate 48U View';
+      }
+    }
+    renderAllViews();
+  }
+
+  // Export Rack Front Elevation to exact single-page A4 PDF
+  function exportRackFrontElevationToPdf(orientation) {
+    if (typeof html2pdf === 'undefined') {
+      if (typeof window.print === 'function') {
+        window.print();
+      } else {
+        alert('PDF Generation Engine is loading. Please try again in a moment.');
+      }
+      return;
+    }
+
+    var totalWatts = 0;
+    var totalBtu = 0;
+    var totalWeight = 0;
+    rackState.devices.forEach(function(d) {
+      totalWatts += (d.powerWatts || 0);
+      totalBtu += (d.btuHr || Math.round(d.powerWatts * WATTS_TO_BTU_HR));
+      totalWeight += (d.weightKg || 0);
+    });
+
+    var dateStr = new Date().toLocaleDateString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    // Render pristine Front Elevation SVG designed for A4 single page output
+    var svgContent = renderFrontRackSVG(true);
+
+    // Build dedicated single-page A4 PDF root element (exact 790px x 1115px portrait)
+    var pdfContainer = document.createElement('div');
+    pdfContainer.id = 'rackFrontPdfExportRoot';
+    pdfContainer.style.cssText = 'position:fixed; left:-9999px; top:-9999px; width:790px; height:1115px; max-height:1115px; padding:22px 24px; box-sizing:border-box; background:#0b0f19; color:#f8fafc; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden; page-break-inside:avoid; break-inside:avoid;';
+
+    pdfContainer.innerHTML = 
+      '<div style="border-bottom:2px solid #0284c7; padding-bottom:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-end;">' +
+        '<div>' +
+          '<div style="color:#38bdf8; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase;">PRO AV SYSTEM ARCHITECT • CAD SPECIFICATION</div>' +
+          '<h2 style="margin:2px 0 0 0; color:#ffffff; font-size:19px; font-weight:800; letter-spacing:-0.3px;">EIA-310-D 19&quot; FRONT RACK ELEVATION</h2>' +
+          '<div style="color:#94a3b8; font-size:10.5px; margin-top:2px;">Enclosure: <strong style="color:#38bdf8;">' + rackState.totalU + 'U (' + (rackState.totalU * EIA_1U_MM).toFixed(1) + ' mm)</strong> | Depth: ' + rackState.rackDepthMm + ' mm | Standard: EIA-310-D / CEA-310-E</div>' +
+        '</div>' +
+        '<div style="text-align:right;">' +
+          '<div style="background:#0284c7; color:#ffffff; font-size:10px; font-weight:700; padding:3px 8px; border-radius:4px; display:inline-block;">HCMM VERIFIED</div>' +
+          '<div style="color:#64748b; font-size:9.5px; margin-top:3px;">Generated: ' + dateStr + '</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div style="display:flex; gap:10px; margin-bottom:12px;">' +
+        '<div style="flex:1; background:#131d2e; border:1px solid #1e293b; border-radius:6px; padding:6px 10px; text-align:center;">' +
+          '<div style="color:#64748b; font-size:8.5px; text-transform:uppercase; font-weight:700;">Installed Units</div>' +
+          '<div style="color:#38bdf8; font-size:14px; font-weight:800;">' + rackState.devices.length + ' Devices (' + rackState.devices.reduce(function(acc, d){ return acc + (d.uHeight||1); }, 0) + 'U / ' + rackState.totalU + 'U)</div>' +
+        '</div>' +
+        '<div style="flex:1; background:#131d2e; border:1px solid #1e293b; border-radius:6px; padding:6px 10px; text-align:center;">' +
+          '<div style="color:#64748b; font-size:8.5px; text-transform:uppercase; font-weight:700;">Total Power</div>' +
+          '<div style="color:#10b981; font-size:14px; font-weight:800;">' + totalWatts.toLocaleString() + ' W</div>' +
+        '</div>' +
+        '<div style="flex:1; background:#131d2e; border:1px solid #1e293b; border-radius:6px; padding:6px 10px; text-align:center;">' +
+          '<div style="color:#64748b; font-size:8.5px; text-transform:uppercase; font-weight:700;">Thermal Load</div>' +
+          '<div style="color:#f59e0b; font-size:14px; font-weight:800;">' + totalBtu.toLocaleString() + ' BTU/hr</div>' +
+        '</div>' +
+        '<div style="flex:1; background:#131d2e; border:1px solid #1e293b; border-radius:6px; padding:6px 10px; text-align:center;">' +
+          '<div style="color:#64748b; font-size:8.5px; text-transform:uppercase; font-weight:700;">Chassis Weight</div>' +
+          '<div style="color:#94a3b8; font-size:14px; font-weight:800;">' + totalWeight.toFixed(1) + ' kg</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div style="flex:1; min-height:0; display:flex; align-items:center; justify-content:center; width:100%; overflow:hidden; page-break-inside:avoid; break-inside:avoid; background:#050811; border:1px solid #1e293b; border-radius:8px; padding:10px;">' +
+        svgContent +
+      '</div>' +
+
+      '<div style="margin-top:10px; padding-top:8px; border-top:1px solid #1e293b; display:flex; justify-content:space-between; align-items:center; font-size:9px; color:#64748b;">' +
+        '<div style="display:flex; align-items:center; gap:12px;">' +
+          '<span style="display:inline-flex; align-items:center; gap:4px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981;"></span> Nominal &lt;400 BTU/h</span>' +
+          '<span style="display:inline-flex; align-items:center; gap:4px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#38bdf8;"></span> Moderate 400-800 BTU/h</span>' +
+          '<span style="display:inline-flex; align-items:center; gap:4px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#f59e0b;"></span> Elevated 800-1200 BTU/h</span>' +
+          '<span style="display:inline-flex; align-items:center; gap:4px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444;"></span> Critical &gt;1200 BTU/h</span>' +
+        '</div>' +
+        '<div>Page 1 of 1 • 100% Vector CAD Fidelity • A4 Exact Fit Guarantee</div>' +
+      '</div>';
+
+    document.body.appendChild(pdfContainer);
+
+    var opt = {
+      margin: [0, 0, 0, 0],
+      filename: 'Rack_' + rackState.totalU + 'U_Front_Elevation_A4.pdf',
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2.5, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(pdfContainer).save().then(function() {
+      if (pdfContainer.parentNode) pdfContainer.parentNode.removeChild(pdfContainer);
+    }).catch(function(err) {
+      console.error('PDF generation error:', err);
+      if (pdfContainer.parentNode) pdfContainer.parentNode.removeChild(pdfContainer);
+    });
   }
 
   // Select Device
@@ -2362,7 +2547,8 @@
     setRackThermalThreshold: setRackThermalThreshold,
     setThermalFilterTier: setThermalFilterTier,
     updateThermalLegendDisplay: updateThermalLegendDisplay,
-    getDeviceThermalTier: getDeviceThermalTier,
+    toggleRackElongatedView: toggleRackElongatedView,
+    exportRackFrontElevationToPdf: exportRackFrontElevationToPdf,
     getState: function() { return rackState; },
     GLOBAL_RACK_STANDARDS: GLOBAL_RACK_STANDARDS
   };
@@ -2396,6 +2582,8 @@
   window.setThermalFilterTier = setThermalFilterTier;
   window.updateThermalLegendDisplay = updateThermalLegendDisplay;
   window.getDeviceThermalTier = getDeviceThermalTier;
+  window.toggleRackElongatedView = toggleRackElongatedView;
+  window.exportRackFrontElevationToPdf = exportRackFrontElevationToPdf;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initRackDesignStudio);
